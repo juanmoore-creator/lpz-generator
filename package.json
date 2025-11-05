@@ -1,25 +1,15 @@
 {
   "name": "lpz-bienes-raices-rcm",
   "version": "1.0.0",
-  "description": "Reporte Comparativo de Mercado (RCM) para LPZ Bienes Raíces usando Next.js y Gemini API.",
-  "main": "src/pages/index.js",
+  "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "start": "next start"
   },
   "dependencies": {
-    "next": "^14.2.5",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "lucide-react": "^0.395.0",
-    "puppeteer-core": "^22.9.0",
-    "chrome-aws-lambda": "^10.0.0"
-  },
-  "devDependencies": {
-    "tailwindcss": "^3.4.4",
-    "postcss": "^8.4.38",
-    "autoprefixer": "^10.4.19"
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   }
 }
