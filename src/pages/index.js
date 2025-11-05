@@ -4,7 +4,9 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { Plus, Trash2, Home, BarChart3, TrendingUp, DollarSign, Calendar, Mail, Phone, User } from 'lucide-react';
 
-const BRAND_COLOR = 'indigo-700';
+// Se usa una variable de color fijo para evitar problemas de compilación de Tailwind CSS
+const BRAND_COLOR_CLASS = 'bg-indigo-700';
+const BRAND_TEXT_COLOR = 'text-indigo-700';
 const API_URL = '/api/generar-pdf'; // Llama a la Serverless Function
 
 // --- Lógica de cálculo de promedios y generación de propiedad (Mantenida) ---
@@ -112,12 +114,21 @@ const App = () => {
             });
 
             if (!response.ok) {
-                // Si la respuesta no es OK, intentamos leer el cuerpo como JSON para obtener el error
-                const errorResult = await response.json();
-                throw new Error(errorResult.message || `Error del servidor (${response.status}).`);
+                // Si la respuesta no es OK, leemos el cuerpo como texto para evitar el error 'json'
+                const errorText = await response.text();
+                let errorMessage = `Error del servidor (${response.status}).`;
+                try {
+                    // Intentamos parsear como JSON si el error fue enviado estructurado
+                    const errorJson = JSON.parse(errorText);
+                    errorMessage = errorJson.message || errorMessage;
+                } catch (e) {
+                    // Si no es JSON, usamos el texto de error o el código de estado
+                    errorMessage = `Error ${response.status}: ${errorText.substring(0, 100)}...`;
+                }
+                throw new Error(errorMessage);
             }
 
-            // AHORA: Manejamos la respuesta binaria (el PDF Blob)
+            // RESPUESTA EXITOSA: Manejamos la respuesta binaria (el PDF Blob)
             const pdfBlob = await response.blob();
             
             // Crear una URL temporal para el Blob
@@ -136,9 +147,13 @@ const App = () => {
             
             // Mensaje de éxito temporal
             setError(null);
-            setTimeout(() => {
-                alert("¡Reporte PDF generado y listo para descargar!");
-            }, 100);
+            // Usamos una alerta temporal personalizada en lugar de alert()
+            const successMessage = document.getElementById('message-area');
+            successMessage.innerHTML = `<div class="p-3 mb-4 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm">
+                ¡Reporte PDF generado y listo para descargar!
+            </div>`;
+            setTimeout(() => { successMessage.innerHTML = ''; }, 5000);
+
 
         } catch (err) {
             console.error("Error al generar el reporte:", err);
@@ -185,7 +200,7 @@ const App = () => {
 
     const PropertyForm = ({ propiedad, onUpdate, isPrincipal }) => (
         <div className={`p-4 rounded-xl shadow-lg border ${isPrincipal ? 'bg-white border-indigo-200' : 'bg-gray-50 border-gray-200'}`}>
-            <h3 className={`text-lg font-semibold mb-4 flex items-center ${isPrincipal ? `text-${BRAND_COLOR}` : 'text-gray-700'}`}>
+            <h3 className={`text-lg font-semibold mb-4 flex items-center ${isPrincipal ? BRAND_TEXT_COLOR : 'text-gray-700'}`}>
                 {isPrincipal ? 'Propiedad Principal (Sujeta a Tasación)' : propiedad.numero}
                 <Home className="w-5 h-5 ml-2" />
             </h3>
@@ -220,7 +235,7 @@ const App = () => {
                         type="checkbox"
                         checked={propiedad.cochera}
                         onChange={(e) => onUpdate('cochera', e.target.checked)}
-                        className={`form-checkbox h-5 w-5 text-indigo-700 rounded focus:ring-indigo-700`}
+                        className={`form-checkbox h-5 w-5 ${BRAND_TEXT_COLOR} rounded focus:ring-indigo-700`}
                     />
                     <label htmlFor={`cochera-${propiedad.id}`} className="ml-2 text-sm font-medium text-gray-700">Incluye Cochera</label>
                 </div>
@@ -248,7 +263,7 @@ const App = () => {
         <div className="min-h-screen bg-gray-50 p-4 md:p-8">
             <div className="max-w-6xl mx-auto">
                 <header className="mb-8">
-                    <h1 className={`text-4xl font-extrabold text-indigo-700 mb-2`}>LPZ BIENES RAÍCES</h1>
+                    <h1 className={`text-4xl font-extrabold ${BRAND_TEXT_COLOR} mb-2`}>LPZ BIENES RAÍCES</h1>
                     <p className="text-xl text-gray-600">Generador de Reporte Comparativo de Mercado (RCM)</p>
                 </header>
 
@@ -262,7 +277,7 @@ const App = () => {
                         2. Propiedades Comparables
                         <button
                             onClick={addComparable}
-                            className={`px-4 py-2 bg-indigo-700 text-white font-semibold rounded-full shadow-md hover:bg-indigo-600 transition flex items-center`}
+                            className={`px-4 py-2 ${BRAND_COLOR_CLASS} text-white font-semibold rounded-full shadow-md hover:bg-indigo-600 transition flex items-center`}
                         >
                             <Plus className="w-5 h-5 mr-1" /> Añadir Comparable
                         </button>
@@ -301,7 +316,7 @@ const App = () => {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {/* Pre-visualización de Promedios */}
                         <div className="lg:col-span-2">
-                            <h3 className={`text-xl font-semibold mb-3 text-indigo-700 flex items-center`}>
+                            <h3 className={`text-xl font-semibold mb-3 ${BRAND_TEXT_COLOR} flex items-center`}>
                                 <BarChart3 className="w-5 h-5 mr-2" />
                                 Promedios del Mercado (N={promedios.total_comparables})
                             </h3>
@@ -375,7 +390,7 @@ const App = () => {
 
                         {/* Datos del Agente */}
                         <div className="lg:col-span-1 border-l-2 border-gray-200 pl-6 space-y-3">
-                            <h3 className={`text-xl font-semibold mb-3 text-indigo-700 flex items-center`}>
+                            <h3 className={`text-xl font-semibold mb-3 ${BRAND_TEXT_COLOR} flex items-center`}>
                                 <User className="w-5 h-5 mr-2" />
                                 Datos del Agente/Oficina
                             </h3>
@@ -389,15 +404,17 @@ const App = () => {
 
                 {/* Botón de Acción y Mensajes */}
                 <footer className="text-center p-4">
-                    {error && (
-                        <div className="p-3 mb-4 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
-                            {error}
-                        </div>
-                    )}
+                    <div id="message-area">
+                        {error && (
+                            <div className="p-3 mb-4 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
+                                {error}
+                            </div>
+                        )}
+                    </div>
                     <button
                         onClick={generarReporte}
                         disabled={isLoading || comparables.length < 1}
-                        className={`w-full md:w-auto px-12 py-4 bg-indigo-700 text-white text-xl font-bold rounded-xl shadow-2xl shadow-indigo-400/50 hover:bg-indigo-600 transition disabled:bg-gray-400 flex items-center justify-center mx-auto`}
+                        className={`w-full md:w-auto px-12 py-4 ${BRAND_COLOR_CLASS} text-white text-xl font-bold rounded-xl shadow-2xl shadow-indigo-400/50 hover:bg-indigo-600 transition disabled:bg-gray-400 flex items-center justify-center mx-auto`}
                     >
                         {isLoading ? (
                             <>
