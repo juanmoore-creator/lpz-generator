@@ -1,11 +1,13 @@
 // Archivo: src/pages/index.js
 // El Frontend de Next.js, llama a la Serverless Function para DESCARGAR el PDF
+// Las clases de Tailwind CSS se usan directamente para asegurar el renderizado
+// (Asumiendo que el proyecto Next.js tiene la configuración básica de Tailwind)
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { Plus, Trash2, Home, BarChart3, TrendingUp, DollarSign, Calendar, Mail, Phone, User } from 'lucide-react';
 
-// Se usa una variable de color fijo para evitar problemas de compilación de Tailwind CSS
-const BRAND_COLOR_CLASS = 'bg-indigo-700';
+// Se usan clases de color fijos para compatibilidad con el compilador de Tailwind
+const BRAND_BG_CLASS = 'bg-indigo-700';
 const BRAND_TEXT_COLOR = 'text-indigo-700';
 const API_URL = '/api/generar-pdf'; // Llama a la Serverless Function
 
@@ -73,7 +75,6 @@ const App = () => {
         matricula: 'CMCPLZ-1234'
     });
     
-    // Eliminamos reporteHTML, ya que forzaremos la descarga
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -114,16 +115,16 @@ const App = () => {
             });
 
             if (!response.ok) {
-                // Si la respuesta no es OK, leemos el cuerpo como texto para evitar el error 'json'
+                // Si la respuesta no es OK, leemos el cuerpo como texto para un diagnóstico
                 const errorText = await response.text();
                 let errorMessage = `Error del servidor (${response.status}).`;
                 try {
                     // Intentamos parsear como JSON si el error fue enviado estructurado
                     const errorJson = JSON.parse(errorText);
-                    errorMessage = errorJson.message || errorMessage;
+                    errorMessage = errorJson.message || `Error ${response.status}: ${errorJson.details || 'Detalle no disponible'}`;
                 } catch (e) {
                     // Si no es JSON, usamos el texto de error o el código de estado
-                    errorMessage = `Error ${response.status}: ${errorText.substring(0, 100)}...`;
+                    errorMessage = `Error ${response.status}: ${errorText.substring(0, 100)}... (Respuesta no JSON)`;
                 }
                 throw new Error(errorMessage);
             }
@@ -147,12 +148,14 @@ const App = () => {
             
             // Mensaje de éxito temporal
             setError(null);
-            // Usamos una alerta temporal personalizada en lugar de alert()
+            // Usamos una alerta temporal personalizada
             const successMessage = document.getElementById('message-area');
-            successMessage.innerHTML = `<div class="p-3 mb-4 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm">
-                ¡Reporte PDF generado y listo para descargar!
-            </div>`;
-            setTimeout(() => { successMessage.innerHTML = ''; }, 5000);
+            if (successMessage) {
+                successMessage.innerHTML = `<div class="p-3 mb-4 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm">
+                    ¡Reporte PDF generado y listo para descargar!
+                </div>`;
+                setTimeout(() => { successMessage.innerHTML = ''; }, 5000);
+            }
 
 
         } catch (err) {
@@ -163,6 +166,8 @@ const App = () => {
                 userError = "Error 403: Verifique que la GEMINI_API_KEY esté habilitada en Vercel.";
             } else if (err.message.includes("500")) {
                 userError = "Error 500: Error interno en la Serverless Function. Revise logs en Vercel.";
+            } else if (err.message.includes("405")) {
+                 userError = "Error 405: Método no permitido. La función API está funcionando correctamente, pero verifique la configuración de su entorno.";
             }
             setError(`Error en la descarga: ${userError}`);
         } finally {
@@ -174,7 +179,6 @@ const App = () => {
 
     // --- Componentes Reutilizables (JSX) ---
 
-    // Componentes PropertyForm, InputGroup, MetricCard se mantienen iguales
     const InputGroup = ({ label, type = 'text', value, onUpdate, children, min = 0 }) => (
         <div className="flex flex-col">
             <label className="text-xs font-medium text-gray-500 mb-1">{label}</label>
@@ -263,7 +267,8 @@ const App = () => {
         <div className="min-h-screen bg-gray-50 p-4 md:p-8">
             <div className="max-w-6xl mx-auto">
                 <header className="mb-8">
-                    <h1 className={`text-4xl font-extrabold ${BRAND_TEXT_COLOR} mb-2`}>LPZ BIENES RAÍCES</h1>
+                    {/* Clase fija para asegurar el color si Tailwind está cargado */}
+                    <h1 className={`text-4xl font-extrabold text-indigo-700 mb-2`}>LPZ BIENES RAÍCES</h1>
                     <p className="text-xl text-gray-600">Generador de Reporte Comparativo de Mercado (RCM)</p>
                 </header>
 
@@ -277,7 +282,8 @@ const App = () => {
                         2. Propiedades Comparables
                         <button
                             onClick={addComparable}
-                            className={`px-4 py-2 ${BRAND_COLOR_CLASS} text-white font-semibold rounded-full shadow-md hover:bg-indigo-600 transition flex items-center`}
+                            // Clase fija para asegurar el estilo si Tailwind está cargado
+                            className={`px-4 py-2 bg-indigo-700 text-white font-semibold rounded-full shadow-md hover:bg-indigo-600 transition flex items-center`}
                         >
                             <Plus className="w-5 h-5 mr-1" /> Añadir Comparable
                         </button>
@@ -316,7 +322,8 @@ const App = () => {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {/* Pre-visualización de Promedios */}
                         <div className="lg:col-span-2">
-                            <h3 className={`text-xl font-semibold mb-3 ${BRAND_TEXT_COLOR} flex items-center`}>
+                            {/* Clase fija para asegurar el color */}
+                            <h3 className={`text-xl font-semibold mb-3 text-indigo-700 flex items-center`}>
                                 <BarChart3 className="w-5 h-5 mr-2" />
                                 Promedios del Mercado (N={promedios.total_comparables})
                             </h3>
@@ -348,6 +355,7 @@ const App = () => {
                             <h4 className="text-lg font-semibold mt-6 mb-2 text-gray-700">Tabla Resumen de Comparables</h4>
                             <div className="overflow-x-auto bg-gray-50 rounded-lg p-2">
                                 <table className="min-w-full divide-y divide-gray-200">
+                                    {/* Clase fija para asegurar el fondo */}
                                     <thead className={`bg-indigo-700 text-white`}>
                                         <tr>
                                             <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider">#</th>
@@ -390,7 +398,8 @@ const App = () => {
 
                         {/* Datos del Agente */}
                         <div className="lg:col-span-1 border-l-2 border-gray-200 pl-6 space-y-3">
-                            <h3 className={`text-xl font-semibold mb-3 ${BRAND_TEXT_COLOR} flex items-center`}>
+                            {/* Clase fija para asegurar el color */}
+                            <h3 className={`text-xl font-semibold mb-3 text-indigo-700 flex items-center`}>
                                 <User className="w-5 h-5 mr-2" />
                                 Datos del Agente/Oficina
                             </h3>
@@ -414,7 +423,8 @@ const App = () => {
                     <button
                         onClick={generarReporte}
                         disabled={isLoading || comparables.length < 1}
-                        className={`w-full md:w-auto px-12 py-4 ${BRAND_COLOR_CLASS} text-white text-xl font-bold rounded-xl shadow-2xl shadow-indigo-400/50 hover:bg-indigo-600 transition disabled:bg-gray-400 flex items-center justify-center mx-auto`}
+                        // Clase fija para asegurar el fondo
+                        className={`w-full md:w-auto px-12 py-4 bg-indigo-700 text-white text-xl font-bold rounded-xl shadow-2xl shadow-indigo-400/50 hover:bg-indigo-600 transition disabled:bg-gray-400 flex items-center justify-center mx-auto`}
                     >
                         {isLoading ? (
                             <>
