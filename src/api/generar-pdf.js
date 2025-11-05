@@ -1,36 +1,33 @@
 // Archivo: src/api/generar-pdf.js
-// Serverless Function de Next.js para generar PDF
-// NOTA: Requiere instalar 'pdfkit' para esta implementación simplificada de PDF binario.
-// Si quiere usar HTML complejo, se requiere 'puppeteer-core' y 'chrome-aws-lambda' en Vercel.
+// IMPLEMENTACIÓN REAL DE GENERACIÓN DE PDF USANDO PUPPETEER EN VERCELL
+// Requiere instalar 'puppeteer-core' y 'chrome-aws-lambda'
 
-// Importación para generar PDF binario (simulación de motor PDF)
-const PDFDocument = require('pdfkit'); 
-const { Writable } = require('stream');
+const chrome = require('chrome-aws-lambda');
+const puppeteer = require('puppeteer-core');
 
-// Variables de Entorno (como en la implementación anterior)
+// Variables de Entorno
 const MODEL_NAME = "gemini-2.5-flash-preview-09-2025";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''; 
+
+// Ruta al ejecutable de Chrome (específica para el entorno Vercel/Lambda)
+const EXE_PATH = process.env.NODE_ENV === 'production'
+    ? '/usr/bin/google-chrome' // Ruta común en entornos sin servidor como Vercel/Lambda
+    : puppeteer.executablePath(); // Ruta para desarrollo local
 
 // --------------------------------------------------------------------------------
 // 1. Lógica para generar el contenido HTML (Usando Gemini para la plantilla)
 // --------------------------------------------------------------------------------
 const generateHtmlContent = async (allDataForAPI) => {
-    // Definición de la persona y el formato para la IA, simulando un motor de plantillas.
-    const systemPrompt = `Actúa como un motor de plantillas que genera el contenido de un Reporte Comparativo de Mercado. Usa el azul índigo como color principal.
-    Genera SOLO el contenido de la portada (Página 1), resumen de promedios (Página 2) y la tabla de comparables (Página 3). No incluyas <head>, <body>, <html> ni estilos de impresión, solo el contenido estructurado que se incrustará.
-    Utiliza HTML y clases de utilidad sencillas (ej. 'header', 'section', 'table').
-    Devuelve SOLO el HTML, sin explicaciones.`;
+    // La prompt de Gemini se mantiene: pide HTML/CSS completo listo para PDF
+    const systemPrompt = `Actúa como un motor de plantillas que genera un archivo HTML/CSS completo y profesional, diseñado específicamente para ser convertido a PDF (tamaño A4). NO uses Tailwind CSS. Usa CSS puro dentro de una etiqueta <style>. Incluye un <head> y un <body>. Incluye un gráfico Chart.js que mapee Precio Publicación vs. Superficie Total usando los datos de las propiedades comparables. Usa la clase CSS 'page-break' para forzar saltos de página entre secciones principales (Portada, Análisis, Detalle Comparables). Devuelve SOLO el código HTML completo.`;
 
     const userQuery = `
-        Genera el contenido del reporte (portada, resumen, tabla de comparables) con el siguiente objeto de datos JSON:
+        Genera el Reporte Comparativo de Mercado con el siguiente objeto de datos JSON:
         ${JSON.stringify(allDataForAPI, null, 2)}
     `;
 
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${GEMINI_API_KEY}`;
     
-    // ... Lógica de llamada a la API con backoff (Omitida por brevedad, pero es la misma que antes) ...
-    // ... Implemente la lógica de fetch y reintento aquí ...
-
     let response;
     try {
         response = await fetch(apiUrl, {
@@ -48,75 +45,59 @@ const generateHtmlContent = async (allDataForAPI) => {
         return result.candidates?.[0]?.content?.parts?.[0]?.text;
 
     } catch (error) {
-        console.error("Error en la llamada a Gemini:", error);
+        console.error("Error en la llamada a Gemini para HTML:", error);
         throw new Error(`Error en la Serverless Function al generar HTML: ${error.message}`);
     }
 };
 
 // --------------------------------------------------------------------------------
-// 2. Lógica para generar el PDF (Usando PDFKit - Simulación de Puppeteer)
+// 2. Lógica para generar el PDF (USANDO PUPPETEER)
 // --------------------------------------------------------------------------------
 
-const generatePdfBuffer = async (contentHtml, agente, promedios) => {
-    // Esta es una simulación de PDFKit. Para Puppeteer, el flujo es diferente.
-    // PDFKit simplemente genera un documento basado en texto y formas.
+const generatePdfBuffer = async (contentHtml) => {
+    let browser = null;
+    let pdfBuffer = null;
 
-    return new Promise((resolve, reject) => {
-        const doc = new PDFDocument({ margin: 50 });
-        const buffer = [];
+    try {
+        // 1. Lanzar el navegador
+        browser = await puppeteer.launch({
+            args: chrome.args,
+            executablePath: await chrome.executablePath, // Usa chrome-aws-lambda para la ruta
+            headless: chrome.headless,
+        });
 
-        // Clase Buffer para recolectar los datos binarios del PDF
-        class BufferWritable extends Writable {
-            _write(chunk, encoding, callback) {
-                buffer.push(chunk);
-                callback();
-            }
-            _final(callback) {
-                resolve(Buffer.concat(buffer));
-                callback();
-            }
+        const page = await browser.newPage();
+        
+        // 2. Cargar el HTML (que ya incluye CSS y Chart.js)
+        await page.setContent(contentHtml, {
+            waitUntil: 'networkidle0', // Espera a que la red esté inactiva (incluyendo la carga de Chart.js)
+        });
+
+        // 3. Generar el PDF
+        pdfBuffer = await page.pdf({
+            format: 'A4',
+            printBackground: true, // Importante para renderizar colores y fondos
+            // Márgenes adaptados para un reporte
+            margin: {
+                top: '1cm',
+                right: '1cm',
+                bottom: '1cm',
+                left: '1cm',
+            },
+            // Aquí es donde se usan los selectores de Gemini para forzar saltos
+            displayHeaderFooter: false 
+        });
+
+    } catch (error) {
+        console.error('Error de Puppeteer:', error);
+        throw new Error(`Fallo en la conversión a PDF con Puppeteer: ${error.message}`);
+    } finally {
+        if (browser !== null) {
+            await browser.close();
         }
-        
-        doc.pipe(new BufferWritable());
-
-        // --- Estructura del PDF ---
-        
-        // 1. Portada
-        doc.fillColor('#4f46e5').fontSize(30).text('LPZ BIENES RAÍCES', { align: 'center' });
-        doc.fillColor('#333').fontSize(20).text('Reporte Comparativo de Mercado (RCM)', { align: 'center' });
-        doc.moveDown(4);
-        doc.fontSize(14).text(`Generado para la propiedad: ${promedios.propiedadPrincipal.ubicacion || 'Sin Ubicación'}`);
-        doc.moveDown(1).fontSize(12).text(`Tipo: ${promedios.propiedadPrincipal.tipo_inmueble} en ${promedios.propiedadPrincipal.tipo_operacion}`);
-
-        doc.moveDown(2).fillColor('#4f46e5').fontSize(16).text('Resumen de Datos Principales:', { underline: true });
-        doc.moveDown(0.5).fillColor('#333').fontSize(12)
-           .text(`Superficie Total: ${promedios.propiedadPrincipal.superficie_total_m2} m²`)
-           .text(`Dormitorios: ${promedios.propiedadPrincipal.dormitorios}`);
-
-        doc.moveDown().text(`Fecha de Generación: ${new Date().toLocaleDateString('es-AR')}`);
-        doc.addPage();
-        
-        // 2. Contenido generado por la IA (asumiendo que es HTML simple, lo pasamos como texto)
-        doc.fillColor('#4f46e5').fontSize(20).text('Análisis de Mercado y Comparables', { underline: true });
-        doc.moveDown(1);
-        doc.fillColor('#333').fontSize(10).text(contentHtml, { 
-            // Esto solo es para PDFKit; con Puppeteer, el HTML se renderiza completo.
-            align: 'left',
-            indent: 10,
-            lineGap: 5,
-        }); 
-
-        // 3. Página de Contacto
-        doc.addPage();
-        doc.fillColor('#4f46e5').fontSize(24).text('Datos de Contacto del Agente', { align: 'center' });
-        doc.moveDown(2).fillColor('#333').fontSize(14)
-           .text(`Agente: ${agente.nombre}`)
-           .text(`Teléfono: ${agente.telefono}`)
-           .text(`Email: ${agente.email}`)
-           .text(`Matrícula: ${agente.matricula}`);
-
-        doc.end();
-    });
+    }
+    
+    return pdfBuffer;
 };
 
 
@@ -132,26 +113,23 @@ export default async function handler(req, res) {
     try {
         const allData = req.body;
         
-        // 1. Generar Contenido (Usando Gemini como motor de plantillas)
+        // 1. Generar Contenido HTML (Gemini)
         const contentHtml = await generateHtmlContent(allData);
 
-        // 2. Generar el PDF Binario (Simulando Puppeteer con PDFKit)
-        // Pasamos todos los datos necesarios para recrear el reporte en el PDF.
-        const pdfBuffer = await generatePdfBuffer(contentHtml, allData.agente, {
-             propiedadPrincipal: allData.propiedadPrincipal,
-             promedios: allData.promedios 
-        });
+        // 2. Generar el PDF Binario (Puppeteer)
+        const pdfBuffer = await generatePdfBuffer(contentHtml);
 
         // 3. Forzar Descarga (Cabeceras HTTP)
-        // Se envía la respuesta binaria
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', 'attachment; filename="Reporte_LPZ_BIENES_RAICES.pdf"');
         res.setHeader('Content-Length', pdfBuffer.length);
         
+        // Enviamos el Buffer binario directamente al cliente
         res.status(200).send(pdfBuffer);
 
     } catch (error) {
         console.error('Error en la Serverless Function:', error);
+        // Devolvemos el error en formato JSON para que el cliente pueda leerlo
         res.status(error.status || 500).json({ 
             message: 'Error al generar el reporte en el servidor.', 
             details: error.message 
