@@ -14,7 +14,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "lucide-react": "^0.395.0",
-    "pdfkit": "^0.14.0"
+    "puppeteer-core": "^22.9.0", // Núcleo de Puppeteer
+    "chrome-aws-lambda": "^10.0.0" // Binario de Chrome para Vercel/Lambda
   },
   "devDependencies": {
     "tailwindcss": "^3.4.4",
