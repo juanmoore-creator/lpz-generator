@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { db } from '../lib/firebase';
 import {
     doc, onSnapshot, setDoc, collection, addDoc,
-    updateDoc, deleteDoc, query, orderBy, getDocs
+    updateDoc, deleteDoc, query, orderBy, getDocs, getDoc, writeBatch
 } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import Papa from 'papaparse';
@@ -36,9 +36,6 @@ export const useValuation = () => {
     const [comparables, setComparables] = useState<Comparable[]>([]);
     const [savedValuations, setSavedValuations] = useState<SavedValuation[]>([]);
 
-    // UI State managed here for convenience/persistence related logic, 
-    // though strict separation might put this in component. 
-    // Keeping logic together as requested.
     const [brokerName, setBrokerName] = useState('Usuario TTasaciones');
     const [matricula, setMatricula] = useState('');
     const [pdfTheme, setPdfTheme] = useState({
@@ -46,14 +43,89 @@ export const useValuation = () => {
         secondary: '#cbd5e1' // slate-300
     });
 
+    const [migrationDone, setMigrationDone] = useState(false);
+
     // --- Effects ---
 
     useEffect(() => {
-        if (!user) return;
-        if (!db) return;
+        if (!user || !db) return;
 
-        const targetRef = doc(db, `artifacts/tasadorpro/users/${user.uid}/data/valuation_active`);
-        const comparablesRef = collection(db, `artifacts/tasadorpro/users/${user.uid}/comparables`);
+        // Path definitions
+        const basePath = `users/${user.uid}`;
+        const targetPath = `${basePath}/data/valuation_active`;
+        const comparablesPath = `${basePath}/comparables`;
+        const savedPath = `${basePath}/saved_valuations`;
+
+        const oldBasePath = `artifacts/tasadorpro/users/${user.uid}`;
+
+        // Migration Logic
+        const migrateData = async () => {
+            if (migrationDone) return;
+
+            try {
+                // Check if new target exists
+                const targetRef = doc(db, targetPath);
+                const targetSnap = await getDoc(targetRef);
+
+                if (!targetSnap.exists()) {
+                    // Try to migrate target
+                    const oldTargetRef = doc(db, `${oldBasePath}/data/valuation_active`);
+                    const oldTargetSnap = await getDoc(oldTargetRef);
+                    if (oldTargetSnap.exists()) {
+                        await setDoc(targetRef, oldTargetSnap.data());
+                        console.log("Migrated Target Property");
+                    }
+                }
+
+                // Check comparables
+                const comparablesRef = collection(db, comparablesPath);
+                const compSnap = await getDocs(comparablesRef);
+
+                if (compSnap.empty) {
+                    const oldComparablesRef = collection(db, `${oldBasePath}/comparables`);
+                    const oldCompSnap = await getDocs(oldComparablesRef);
+
+                    if (!oldCompSnap.empty) {
+                        const batch = writeBatch(db);
+                        oldCompSnap.forEach(d => {
+                            batch.set(doc(comparablesRef, d.id), d.data());
+                        });
+                        await batch.commit();
+                        console.log(`Migrated ${oldCompSnap.size} comparables`);
+                    }
+                }
+
+                // Check saved valuations
+                const savedRef = collection(db, savedPath);
+                const savedSnap = await getDocs(savedRef);
+
+                if (savedSnap.empty) {
+                    const oldSavedRef = collection(db, `${oldBasePath}/saved_valuations`);
+                    const oldSavedSnap = await getDocs(oldSavedRef);
+
+                    if (!oldSavedSnap.empty) {
+                        const batch = writeBatch(db);
+                        oldSavedSnap.forEach(d => {
+                            batch.set(doc(savedRef, d.id), d.data());
+                        });
+                        await batch.commit();
+                        console.log(`Migrated ${oldSavedSnap.size} saved valuations`);
+                    }
+                }
+
+                setMigrationDone(true);
+
+            } catch (error) {
+                console.error("Migration Error:", error);
+            }
+        };
+
+        migrateData();
+
+        // Subscriptions
+        const targetRef = doc(db, targetPath);
+        const comparablesRef = collection(db, comparablesPath);
+        const savedRef = collection(db, savedPath);
 
         // Sync Target
         const unsubTarget = onSnapshot(targetRef, (doc) => {
@@ -74,11 +146,12 @@ export const useValuation = () => {
         });
 
         // Sync Saved Valuations
-        const savedRef = collection(db, `artifacts/tasadorpro/users/${user.uid}/saved_valuations`);
         const qSaved = query(savedRef, orderBy('date', 'desc'));
         const unsubSaved = onSnapshot(qSaved, (snapshot) => {
             const saved = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as SavedValuation));
             setSavedValuations(saved);
+        }, (error) => {
+            console.error("Error syncing saved valuations:", error);
         });
 
         return () => {
@@ -86,7 +159,7 @@ export const useValuation = () => {
             unsubComparables();
             unsubSaved();
         };
-    }, [user]);
+    }, [user, migrationDone]);
 
     // --- Actions ---
 
@@ -96,7 +169,7 @@ export const useValuation = () => {
         const newTarget = { ...target, ...updates };
         setTarget(newTarget); // Optimistic
         if (user && db) {
-            await setDoc(doc(db, `artifacts/tasadorpro/users/${user.uid}/data/valuation_active`), newTarget, { merge: true });
+            await setDoc(doc(db, `users/${user.uid}/data/valuation_active`), newTarget, { merge: true });
         }
     };
 
@@ -124,7 +197,7 @@ export const useValuation = () => {
             images: []
         };
         if (user && db) {
-            await addDoc(collection(db, `artifacts/tasadorpro/users/${user.uid}/comparables`), newComp);
+            await addDoc(collection(db, `users/${user.uid}/comparables`), newComp);
         } else {
             setComparables([...comparables, { ...newComp, id: Math.random().toString() }]);
         }
@@ -132,7 +205,7 @@ export const useValuation = () => {
 
     const updateComparable = async (id: string, updates: Partial<Comparable>) => {
         if (user && db) {
-            await updateDoc(doc(db, `artifacts/tasadorpro/users/${user.uid}/comparables`, id), updates);
+            await updateDoc(doc(db, `users/${user.uid}/comparables`, id), updates);
         } else {
             setComparables(comparables.map(c => c.id === id ? { ...c, ...updates } : c));
         }
@@ -140,7 +213,7 @@ export const useValuation = () => {
 
     const deleteComparable = async (id: string) => {
         if (user && db) {
-            await deleteDoc(doc(db, `artifacts/tasadorpro/users/${user.uid}/comparables`, id));
+            await deleteDoc(doc(db, `users/${user.uid}/comparables`, id));
         } else {
             setComparables(comparables.filter(c => c.id !== id));
         }
@@ -176,8 +249,8 @@ export const useValuation = () => {
         setComparables([]);
 
         if (user && db) {
-            await setDoc(doc(db, `artifacts/tasadorpro/users/${user.uid}/data/valuation_active`), emptyTarget);
-            const compsRef = collection(db, `artifacts/tasadorpro/users/${user.uid}/comparables`);
+            await setDoc(doc(db, `users/${user.uid}/data/valuation_active`), emptyTarget);
+            const compsRef = collection(db, `users/${user.uid}/comparables`);
             const q = query(compsRef);
             const snapshot = await getDocs(q);
             const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref));
@@ -206,7 +279,7 @@ export const useValuation = () => {
                 target: target,
                 comparables: comparables
             };
-            await addDoc(collection(db, `artifacts/tasadorpro/users/${user.uid}/saved_valuations`), newValuation);
+            await addDoc(collection(db, `users/${user.uid}/saved_valuations`), newValuation);
             alert("Tasación guardada correctamente.");
         } catch (error: any) {
             console.error("Save Error:", error);
@@ -218,7 +291,7 @@ export const useValuation = () => {
         if (!user || !db) return;
         if (!confirm("¿Estás seguro de eliminar esta tasación?")) return;
         try {
-            await deleteDoc(doc(db, `artifacts/tasadorpro/users/${user.uid}/saved_valuations`, id));
+            await deleteDoc(doc(db, `users/${user.uid}/saved_valuations`, id));
         } catch (error: any) {
             console.error("Delete Error:", error);
             alert("Error al eliminar.");
@@ -232,8 +305,8 @@ export const useValuation = () => {
             setComparables(valuation.comparables);
 
             if (user && db) {
-                await setDoc(doc(db, `artifacts/tasadorpro/users/${user.uid}/data/valuation_active`), valuation.target, { merge: true });
-                const compsRef = collection(db, `artifacts/tasadorpro/users/${user.uid}/comparables`);
+                await setDoc(doc(db, `users/${user.uid}/data/valuation_active`), valuation.target, { merge: true });
+                const compsRef = collection(db, `users/${user.uid}/comparables`);
                 const snapshot = await getDocs(query(compsRef));
                 await Promise.all(snapshot.docs.map(d => deleteDoc(d.ref)));
                 await Promise.all(valuation.comparables.map(c => addDoc(compsRef, c)));
@@ -324,7 +397,7 @@ export const useValuation = () => {
                         }
 
                         if (user && db) {
-                            await Promise.all(newComps.map(c => addDoc(collection(db, `artifacts/tasadorpro/users/${user.uid}/comparables`), c)));
+                            await Promise.all(newComps.map(c => addDoc(collection(db, `users/${user.uid}/comparables`), c)));
                         } else {
                             setComparables(prev => [...prev, ...newComps.map(c => ({ ...c, id: Math.random().toString() }))]);
                         }
