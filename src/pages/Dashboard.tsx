@@ -25,7 +25,7 @@ function Dashboard() {
     sheetUrl, setSheetUrl, handleImportFromSheet,
     brokerName, setBrokerName,
     matricula, setMatricula,
-    pdfTheme, setPdfTheme,
+    pdfTheme,
     stats, valuation, targetHomogenizedSurface
   } = useValuation();
 
