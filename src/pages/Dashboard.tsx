@@ -34,13 +34,10 @@ function Dashboard() {
   // I will use a local state for the modal since the hook didn't export it (I saw I didn't add it to hook return).
   // Wait, I didn't add `savedValuationsModalOpen` to hook. I only added the logic.
   // I will add it here.
-  const [brokerName, setBrokerName] = useState('Usuario TTasaciones');
-  const [matricula, setMatricula] = useState('');
+  const [savedValuationsModalOpen, setSavedValuationsModalOpen] = useState(false);
+  const [editingCompId, setEditingCompId] = useState<string | null>(null);
+  const [showOptionalTarget, setShowOptionalTarget] = useState(false);
   const [clientName, setClientName] = useState('');
-  const [pdfTheme, setPdfTheme] = useState({
-    primary: '#4f46e5', // indigo-600
-    secondary: '#cbd5e1' // slate-300
-  });
 
   const editingComparable = useMemo(() =>
     comparables.find(c => c.id === editingCompId) || null
