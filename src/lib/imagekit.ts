@@ -37,6 +37,22 @@ export const uploadImage = async (file: File): Promise<string> => {
         return response.url;
     } catch (error) {
         console.error("Upload failed", error);
+
+        // Detailed Debugging on Failure
+        try {
+            console.log("Attempting to debug auth endpoint...");
+            const authTest = await fetch(authenticationEndpoint);
+            const status = authTest.status;
+            const text = await authTest.text();
+            console.error("Auth Endpoint Status:", status);
+            console.error("Auth Endpoint Response:", text);
+            if (status !== 200) {
+                alert(`Error en el servidor de autenticación (Status ${status}). Revisa la consola para más detalles.`);
+            }
+        } catch (debugError) {
+            console.error("Could not reach auth endpoint during debug:", debugError);
+        }
+
         throw error;
     }
 };

@@ -1,4 +1,5 @@
-import ImageKit from "imagekit";
+import ImageKitLib from "imagekit";
+const ImageKit = ImageKitLib.default || ImageKitLib;
 
 export default function handler(req, res) {
     // Allow simple CORS for local development or production
