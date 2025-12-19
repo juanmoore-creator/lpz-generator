@@ -275,21 +275,25 @@ export const useValuation = () => {
 
             if (currentValuationId) {
                 // UPDATE / OVERWRITE LOGIC
-                const docPath = `${paths.savedPath}/${currentValuationId}`;
-                console.log("Saving (Overwrite) to:", docPath);
+                // STRICT REQUIREMENT: Use setDoc with merge: true
+                const docRef = doc(db, paths.savedPath, currentValuationId);
+                console.log("Saving (Overwrite) to:", docRef.path);
 
-                await setDoc(doc(db, paths.savedPath, currentValuationId), valuationData, { merge: true });
+                await setDoc(docRef, valuationData, { merge: true });
+                console.log('ESCRITURA COMPLETADA EN:', docRef.path);
 
-                console.log('Update successful');
                 window.alert("Tasación actualizada correctamente.");
             } else {
                 // NEW CREATE LOGIC
-                console.log("Saving (New) to:", paths.savedPath);
+                // STRICT REQUIREMENT: Use setDoc even for new docs to ensure creation
+                // We generate a new ID first
+                const newDocRef = doc(collection(db, paths.savedPath));
+                console.log("Saving (New) to:", newDocRef.path);
 
-                const docRef = await addDoc(collection(db, paths.savedPath), valuationData);
+                await setDoc(newDocRef, valuationData, { merge: true });
+                console.log('ESCRITURA COMPLETADA EN:', newDocRef.path);
 
-                console.log('Create successful, new ID:', docRef.id);
-                setCurrentValuationId(docRef.id);
+                setCurrentValuationId(newDocRef.id);
                 window.alert("Tasación guardada correctamente.");
             }
         } catch (error: any) {

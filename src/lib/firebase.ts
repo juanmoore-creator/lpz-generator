@@ -22,6 +22,7 @@ try {
     auth = getAuth(app);
 
     console.log("Configuración cargada para el proyecto:", firebaseConfig.projectId);
+    console.log("Firestore Instance Project ID:", db.app.options.projectId);
 
     // Enable Multi-Tab Offline Persistence
     // We treat this as a side-effect that shouldn't crash the app if it fails
