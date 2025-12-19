@@ -29,30 +29,30 @@ export const uploadImage = async (file: File): Promise<string> => {
     }
 
     try {
+        // Manual Auth Fetch to bypass SDK issues
+        let authParams;
+        try {
+            const authResponse = await fetch(authenticationEndpoint);
+            if (!authResponse.ok) {
+                throw new Error(`Auth endpoint failed with status ${authResponse.status}`);
+            }
+            authParams = await authResponse.json();
+        } catch (e) {
+            console.error("Failed to fetch auth params manually:", e);
+            throw e; // Re-throw to stop upload if auth fails
+        }
+
         const response = await imagekit.upload({
             file: file,
             fileName: file.name,
-            tags: ["valuation-app"]
+            tags: ["valuation-app"],
+            token: authParams.token,
+            signature: authParams.signature,
+            expire: authParams.expire
         });
         return response.url;
     } catch (error) {
         console.error("Upload failed", error);
-
-        // Detailed Debugging on Failure
-        try {
-            console.log("Attempting to debug auth endpoint...");
-            const authTest = await fetch(authenticationEndpoint);
-            const status = authTest.status;
-            const text = await authTest.text();
-            console.error("Auth Endpoint Status:", status);
-            console.error("Auth Endpoint Response:", text);
-            if (status !== 200) {
-                alert(`Error en el servidor de autenticación (Status ${status}). Revisa la consola para más detalles.`);
-            }
-        } catch (debugError) {
-            console.error("Could not reach auth endpoint during debug:", debugError);
-        }
-
         throw error;
     }
 };
