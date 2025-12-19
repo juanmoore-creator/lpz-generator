@@ -295,7 +295,10 @@ export const useValuation = () => {
             await setDoc(docRef, valuationData, { merge: true });
 
             console.log('✅ Documento guardado con éxito en:', docRef.path);
-            window.alert("Tasación guardada correctamente.");
+
+            // Explicit alert as requested for cloud sync verification
+            window.alert('Sincronización con la nube completada');
+            // window.alert("Tasación guardada correctamente."); // Commented out to avoid double alert
 
         } catch (error: any) {
             console.error("Save Error:", error);

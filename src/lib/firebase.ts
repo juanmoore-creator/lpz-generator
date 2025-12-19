@@ -24,19 +24,18 @@ try {
     console.log("Configuración cargada para el proyecto:", firebaseConfig.projectId);
     console.log("Firestore Instance Project ID:", db.app.options.projectId);
 
-    // Enable Multi-Tab Offline Persistence
-    // We treat this as a side-effect that shouldn't crash the app if it fails
-    enableMultiTabIndexedDbPersistence(db).catch((err) => {
-        if (err.code == 'failed-precondition') {
-            console.warn('Persistence failed: Multiple tabs open (and multi-tab not supported by browser?).');
-        } else if (err.code == 'unimplemented') {
-            console.warn('Persistence not supported by browser.');
-        } else {
-            console.warn('Persistence failed for unknown reason:', err);
-        }
-    });
+    // Enable Multi-Tab Offline Persistence - TEMPORARILY DISABLED
+    // enableMultiTabIndexedDbPersistence(db).catch((err) => {
+    //     if (err.code == 'failed-precondition') {
+    //         console.warn('Persistence failed: Multiple tabs open (and multi-tab not supported by browser?).');
+    //     } else if (err.code == 'unimplemented') {
+    //         console.warn('Persistence not supported by browser.');
+    //     } else {
+    //         console.warn('Persistence failed for unknown reason:', err);
+    //     }
+    // });
 
-    console.log("Firebase Initialized with Persistence");
+    console.log("Firebase Initialized (Persistence Disabled)");
 } catch (e) {
     console.error("Firebase Initialization Failed:", e);
 }
