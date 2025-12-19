@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Upload, X, Image as ImageIcon, Loader2, Trash2 } from 'lucide-react';
+import { Upload, Loader2, Trash2 } from 'lucide-react';
 import { uploadImage } from '../lib/imagekit';
 
 interface ImageUploadProps {
