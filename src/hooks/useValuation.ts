@@ -357,11 +357,13 @@ export const useValuation = () => {
 
                 // Using setDoc with merge: true instead of updateDoc
                 await setDoc(doc(db, paths.savedPath, currentValuationId), valuationData, { merge: true });
+                console.log('Escritura exitosa (Update)');
                 alert("Tasación actualizada correctamente.");
             } else {
                 // NEW CREATE LOGIC
                 console.log("Saving (New) to:", paths.savedPath);
                 const docRef = await addDoc(collection(db, paths.savedPath), valuationData);
+                console.log('Escritura exitosa');
                 setCurrentValuationId(docRef.id);
                 alert("Tasación guardada correctamente.");
             }
