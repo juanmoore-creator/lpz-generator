@@ -1,8 +1,11 @@
 import { useState, useMemo } from 'react';
 import {
   Upload, Home, Trash2, Plus, AlertCircle, FileSpreadsheet, Save, FolderOpen, X, FileText,
-  Pencil, ChevronDown, ChevronUp, CheckSquare, BarChart
+  Pencil, ChevronDown, ChevronUp, CheckSquare, BarChart, Database
 } from 'lucide-react';
+import { db } from '../lib/firebase';
+import { doc, setDoc } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 import { cn } from '../components/ui/Card'; // Importing helper if needed or just use clsx/tailwind directly
 import { Card } from '../components/ui/Card';
 import { StatCard } from '../components/ui/StatCard';
@@ -41,6 +44,22 @@ function Dashboard() {
   const editingComparable = useMemo(() =>
     comparables.find(c => c.id === editingCompId) || null
     , [comparables, editingCompId]);
+
+  // DEBUG: Force Write
+  const { user } = useAuth();
+  const handleForceWrite = async () => {
+    if (!user) return alert("No user");
+    try {
+      console.log("Forzando escritura en test...");
+      const ref = doc(db, 'users', user.uid, 'data', 'test');
+      await setDoc(ref, { hello: 'world', time: Date.now() });
+      console.log("ESCRITURA FORZADA EXITOSA en:", ref.path);
+      alert("Escritura forzada exitosa. Revisa Firestore.");
+    } catch (e: any) {
+      console.error("Error escritura forzada:", e);
+      alert("Error: " + e.message);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-8">
@@ -94,6 +113,14 @@ function Dashboard() {
           />
         </div>
       </div>
+
+      {/* DEBUG BUTTON */}
+      <button
+        onClick={handleForceWrite}
+        className="fixed bottom-4 right-4 z-50 bg-red-600 text-white px-4 py-2 rounded-full shadow-lg hover:bg-red-700 font-bold flex items-center gap-2"
+      >
+        <Database className="w-4 h-4" /> FORZAR ESCRITURA
+      </button>
 
       {/* Saved Valuations Modal */}
       {savedValuationsModalOpen && (
