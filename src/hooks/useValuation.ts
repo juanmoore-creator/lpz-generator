@@ -36,6 +36,9 @@ export const useValuation = () => {
     const [comparables, setComparables] = useState<Comparable[]>([]);
     const [savedValuations, setSavedValuations] = useState<SavedValuation[]>([]);
 
+    // Track the currently loaded valuation ID to allow overwriting
+    const [currentValuationId, setCurrentValuationId] = useState<string | null>(null);
+
     const [brokerName, setBrokerName] = useState('Usuario TTasaciones');
     const [matricula, setMatricula] = useState('');
     const [pdfTheme, setPdfTheme] = useState({
@@ -55,6 +58,9 @@ export const useValuation = () => {
         const targetPath = `${basePath}/data/valuation_active`;
         const comparablesPath = `${basePath}/comparables`;
         const savedPath = `${basePath}/saved_valuations`;
+
+        // Log for debugging sync issues
+        console.log("Syncing from base path:", basePath);
 
         const oldBasePath = `artifacts/tasadorpro/users/${user.uid}`;
 
@@ -247,6 +253,7 @@ export const useValuation = () => {
 
         setTarget(emptyTarget);
         setComparables([]);
+        setCurrentValuationId(null); // Reset ID
 
         if (user && db) {
             await setDoc(doc(db, `users/${user.uid}/data/valuation_active`), emptyTarget);
@@ -263,27 +270,40 @@ export const useValuation = () => {
             alert("Debes estar conectado para guardar.");
             return;
         }
-        if (savedValuations.length >= 30) {
+
+        // Only enforce limit if creating a NEW valuation
+        if (!currentValuationId && savedValuations.length >= 30) {
             alert("Has alcanzado el límite de 30 tasaciones guardadas. Elimina alguna para continuar.");
             return;
         }
+
         if (!target.address) {
             alert("Ingresa una dirección para la propiedad objetivo antes de guardar.");
             return;
         }
 
         try {
-            const newValuation: Omit<SavedValuation, 'id'> = {
-                name: `${target.address} - ${new Date().toLocaleDateString()}`,
+            const valuationName = `${target.address} - ${new Date().toLocaleDateString()}`;
+            const valuationData = {
                 date: Date.now(),
                 target: target,
-                comparables: comparables
+                comparables: comparables,
+                name: valuationName
             };
-            await addDoc(collection(db, `users/${user.uid}/saved_valuations`), newValuation);
-            alert("Tasación guardada correctamente.");
+
+            if (currentValuationId) {
+                // Overwrite existing
+                await updateDoc(doc(db, `users/${user.uid}/saved_valuations`, currentValuationId), valuationData);
+                alert("Tasación actualizada correctamente.");
+            } else {
+                // Create new
+                const docRef = await addDoc(collection(db, `users/${user.uid}/saved_valuations`), valuationData);
+                setCurrentValuationId(docRef.id);
+                alert("Tasación guardada correctamente.");
+            }
         } catch (error: any) {
             console.error("Save Error:", error);
-            alert("Error al guardar tasación.");
+            alert("Error al guardar tasación: " + error.message);
         }
     };
 
@@ -292,6 +312,10 @@ export const useValuation = () => {
         if (!confirm("¿Estás seguro de eliminar esta tasación?")) return;
         try {
             await deleteDoc(doc(db, `users/${user.uid}/saved_valuations`, id));
+            // If we deleted the one currently open, reset the ID to avoid phantom updates
+            if (id === currentValuationId) {
+                setCurrentValuationId(null);
+            }
         } catch (error: any) {
             console.error("Delete Error:", error);
             alert("Error al eliminar.");
@@ -303,6 +327,7 @@ export const useValuation = () => {
         try {
             setTarget(valuation.target);
             setComparables(valuation.comparables);
+            setCurrentValuationId(valuation.id); // Set the current ID
 
             if (user && db) {
                 await setDoc(doc(db, `users/${user.uid}/data/valuation_active`), valuation.target, { merge: true });
