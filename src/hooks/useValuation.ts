@@ -259,15 +259,14 @@ export const useValuation = () => {
             return;
         }
 
-        // PROPER VALIDATION
+        // VALIDATION
         if (!target.address || target.address.trim() === '') {
             window.alert("Ingresa una dirección válida para la propiedad antes de guardar.");
             return;
         }
 
         try {
-            // WAKE UP FIRESTORE LATEST
-            // Ensure user root document exists to initialize collection if empty
+            // WAKE UP / ENSURE USER EXISTS
             await setDoc(doc(db, 'users', user.uid), { lastActive: Date.now() }, { merge: true });
 
             const valuationName = `${target.address} - ${new Date().toLocaleDateString()}`;
@@ -281,24 +280,18 @@ export const useValuation = () => {
             let docRef;
 
             if (currentValuationId) {
-                // UPDATE EXISTING
                 docRef = doc(db, paths.savedPath, currentValuationId);
             } else {
-                // CREATE NEW
-                // STRICT: Generate ID first, then setDoc
                 docRef = doc(collection(db, paths.savedPath));
-                // SYNC STATE IMMEDIATELY
-                setCurrentValuationId(docRef.id);
             }
 
             // UNIFIED WRITE - ALWAYS setDoc with Merge
             await setDoc(docRef, valuationData, { merge: true });
 
-            console.log('✅ Documento guardado con éxito en:', docRef.path);
+            // IMMEDIATE SYNC
+            setCurrentValuationId(docRef.id);
 
-            // Explicit alert as requested for cloud sync verification
-            window.alert('Sincronización con la nube completada');
-            // window.alert("Tasación guardada correctamente."); // Commented out to avoid double alert
+            window.alert("Tasación guardada correctamente.");
 
         } catch (error: any) {
             console.error("Save Error:", error);
@@ -313,7 +306,6 @@ export const useValuation = () => {
         if (!confirm("¿Estás seguro de eliminar esta tasación?")) return;
         try {
             const docPath = `${paths.savedPath}/${id}`;
-            console.log("Deleting valuation at:", docPath);
             await deleteDoc(doc(db, docPath));
 
             if (id === currentValuationId) {
@@ -337,7 +329,6 @@ export const useValuation = () => {
             setCurrentValuationId(valuation.id);
 
             if (user && db) {
-                console.log("Loading valuation, batch update started");
                 const batch = writeBatch(db);
 
                 // 1. Update Target
@@ -356,7 +347,6 @@ export const useValuation = () => {
                 });
 
                 await batch.commit();
-                console.log("Valuation loaded successfully");
             }
         } catch (error: any) {
             console.error("Load Error:", error);
@@ -446,7 +436,6 @@ export const useValuation = () => {
                         }
 
                         if (user && db && paths) {
-                            console.log("Importing batch to:", paths.comparablesPath);
                             const batch = writeBatch(db);
                             newComps.forEach(c => {
                                 const newRef = doc(collection(db, paths.comparablesPath));
@@ -516,27 +505,6 @@ export const useValuation = () => {
         };
     }, [stats, targetHomogenizedSurface]);
 
-    const emergencySave = async () => {
-        try {
-            console.log("🔥 INICIANDO SALVADO DE EMERGENCIA...");
-            if (!user) {
-                alert("NO USER");
-                return;
-            }
-            // Direct write to TEST_COLLECTION
-            await setDoc(doc(db, 'TEST_COLLECTION', 'test_doc'), {
-                time: Date.now(),
-                uid: user.uid,
-                status: 'IT WORKS'
-            });
-            console.log("🔥 ESCRITURA EN TEST_COLLECTION EXITOSA");
-            alert("🔥 ÉXITO: Revisa si existe la colección 'TEST_COLLECTION' en Firebase Console.");
-        } catch (e: any) {
-            console.error("🔥 ERROR EMERGENCY SAVE:", e);
-            alert("🔥 FALLÓ: " + e.message);
-        }
-    };
-
     return {
         target, setTarget, updateTarget,
         comparables, setComparables, addComparable, updateComparable, deleteComparable, processedComparables,
@@ -545,7 +513,6 @@ export const useValuation = () => {
         brokerName, setBrokerName,
         matricula, setMatricula,
         pdfTheme, setPdfTheme,
-        stats, valuation, targetHomogenizedSurface,
-        emergencySave
+        stats, valuation, targetHomogenizedSurface
     };
 };
