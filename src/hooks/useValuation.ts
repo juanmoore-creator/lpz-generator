@@ -35,8 +35,6 @@ export const useValuation = () => {
 
     const [comparables, setComparables] = useState<Comparable[]>([]);
     const [savedValuations, setSavedValuations] = useState<SavedValuation[]>([]);
-
-    // Track the currently loaded valuation ID to allow overwriting
     const [currentValuationId, setCurrentValuationId] = useState<string | null>(null);
 
     const [brokerName, setBrokerName] = useState('Usuario TTasaciones');
@@ -59,70 +57,82 @@ export const useValuation = () => {
         const comparablesPath = `${basePath}/comparables`;
         const savedPath = `${basePath}/saved_valuations`;
 
-        // Log for debugging sync issues
-        console.log("Syncing from base path:", basePath);
-
-        const oldBasePath = `artifacts/tasadorpro/users/${user.uid}`;
-
         // Migration Logic
         const migrateData = async () => {
             if (migrationDone) return;
 
             try {
-                // Check if new target exists
-                const targetRef = doc(db, targetPath);
-                const targetSnap = await getDoc(targetRef);
+                // We use a safe check. If offline/error, we log and skip migration to avoid blocking.
+                // Migration is opportunistic.
 
-                if (!targetSnap.exists()) {
-                    // Try to migrate target
-                    const oldTargetRef = doc(db, `${oldBasePath}/data/valuation_active`);
-                    const oldTargetSnap = await getDoc(oldTargetRef);
-                    if (oldTargetSnap.exists()) {
-                        await setDoc(targetRef, oldTargetSnap.data());
-                        console.log("Migrated Target Property");
+                // Check if new target exists
+                try {
+                    const targetRef = doc(db, targetPath);
+                    const targetSnap = await getDoc(targetRef);
+
+                    if (!targetSnap.exists()) {
+                        const oldBasePath = `artifacts/tasadorpro/users/${user.uid}`;
+                        const oldTargetRef = doc(db, `${oldBasePath}/data/valuation_active`);
+                        const oldTargetSnap = await getDoc(oldTargetRef);
+                        if (oldTargetSnap.exists()) {
+                            await setDoc(targetRef, oldTargetSnap.data());
+                            console.log("Migrated Target Property");
+                        }
                     }
+                } catch (e) {
+                    console.warn("Migration (Target) skipped/failed (likely offline):", e);
                 }
 
                 // Check comparables
-                const comparablesRef = collection(db, comparablesPath);
-                const compSnap = await getDocs(comparablesRef);
+                try {
+                    const comparablesRef = collection(db, comparablesPath);
+                    const compSnap = await getDocs(comparablesRef);
 
-                if (compSnap.empty) {
-                    const oldComparablesRef = collection(db, `${oldBasePath}/comparables`);
-                    const oldCompSnap = await getDocs(oldComparablesRef);
+                    if (compSnap.empty) {
+                        const oldBasePath = `artifacts/tasadorpro/users/${user.uid}`;
+                        const oldComparablesRef = collection(db, `${oldBasePath}/comparables`);
+                        const oldCompSnap = await getDocs(oldComparablesRef);
 
-                    if (!oldCompSnap.empty) {
-                        const batch = writeBatch(db);
-                        oldCompSnap.forEach(d => {
-                            batch.set(doc(comparablesRef, d.id), d.data());
-                        });
-                        await batch.commit();
-                        console.log(`Migrated ${oldCompSnap.size} comparables`);
+                        if (!oldCompSnap.empty) {
+                            const batch = writeBatch(db);
+                            oldCompSnap.forEach(d => {
+                                batch.set(doc(comparablesRef, d.id), d.data());
+                            });
+                            await batch.commit();
+                            console.log(`Migrated ${oldCompSnap.size} comparables`);
+                        }
                     }
+                } catch (e) {
+                    console.warn("Migration (Comparables) skipped/failed:", e);
                 }
 
                 // Check saved valuations
-                const savedRef = collection(db, savedPath);
-                const savedSnap = await getDocs(savedRef);
+                try {
+                    const savedRef = collection(db, savedPath);
+                    const savedSnap = await getDocs(savedRef);
 
-                if (savedSnap.empty) {
-                    const oldSavedRef = collection(db, `${oldBasePath}/saved_valuations`);
-                    const oldSavedSnap = await getDocs(oldSavedRef);
+                    if (savedSnap.empty) {
+                        const oldBasePath = `artifacts/tasadorpro/users/${user.uid}`;
+                        const oldSavedRef = collection(db, `${oldBasePath}/saved_valuations`);
+                        const oldSavedSnap = await getDocs(oldSavedRef);
 
-                    if (!oldSavedSnap.empty) {
-                        const batch = writeBatch(db);
-                        oldSavedSnap.forEach(d => {
-                            batch.set(doc(savedRef, d.id), d.data());
-                        });
-                        await batch.commit();
-                        console.log(`Migrated ${oldSavedSnap.size} saved valuations`);
+                        if (!oldSavedSnap.empty) {
+                            const batch = writeBatch(db);
+                            oldSavedSnap.forEach(d => {
+                                batch.set(doc(savedRef, d.id), d.data());
+                            });
+                            await batch.commit();
+                            console.log(`Migrated ${oldSavedSnap.size} saved valuations`);
+                        }
                     }
+                } catch (e) {
+                    console.warn("Migration (Saved) skipped/failed:", e);
                 }
 
                 setMigrationDone(true);
 
             } catch (error) {
-                console.error("Migration Error:", error);
+                console.error("Migration Fatal Error:", error);
             }
         };
 
@@ -133,7 +143,6 @@ export const useValuation = () => {
         const comparablesRef = collection(db, comparablesPath);
         const savedRef = collection(db, savedPath);
 
-        // Sync Target
         const unsubTarget = onSnapshot(targetRef, (doc) => {
             if (doc.exists()) {
                 setTarget(doc.data() as TargetProperty);
@@ -142,8 +151,7 @@ export const useValuation = () => {
             console.error("Error syncing target:", error);
         });
 
-        // Sync Comparables
-        const q = query(comparablesRef, orderBy('daysOnMarket', 'asc')); // Default sort
+        const q = query(comparablesRef, orderBy('daysOnMarket', 'asc'));
         const unsubComparables = onSnapshot(q, (snapshot) => {
             const comps = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Comparable));
             setComparables(comps);
@@ -151,7 +159,6 @@ export const useValuation = () => {
             console.error("Error syncing comparables:", error);
         });
 
-        // Sync Saved Valuations
         const qSaved = query(savedRef, orderBy('date', 'desc'));
         const unsubSaved = onSnapshot(qSaved, (snapshot) => {
             const saved = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as SavedValuation));
@@ -253,15 +260,25 @@ export const useValuation = () => {
 
         setTarget(emptyTarget);
         setComparables([]);
-        setCurrentValuationId(null); // Reset ID
+        setCurrentValuationId(null);
 
         if (user && db) {
-            await setDoc(doc(db, `users/${user.uid}/data/valuation_active`), emptyTarget);
+            const batch = writeBatch(db);
+
+            // 1. Reset Target
+            const targetRef = doc(db, `users/${user.uid}/data/valuation_active`);
+            batch.set(targetRef, emptyTarget);
+
+            // 2. Clear Comparables
             const compsRef = collection(db, `users/${user.uid}/comparables`);
             const q = query(compsRef);
+            // Must fetch to get IDs
             const snapshot = await getDocs(q);
-            const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref));
-            await Promise.all(deletePromises);
+            snapshot.docs.forEach(d => {
+                batch.delete(d.ref);
+            });
+
+            await batch.commit();
         }
     };
 
@@ -271,14 +288,15 @@ export const useValuation = () => {
             return;
         }
 
-        // Only enforce limit if creating a NEW valuation
+        // LIMIT CHECK
         if (!currentValuationId && savedValuations.length >= 30) {
-            alert("Has alcanzado el límite de 30 tasaciones guardadas. Elimina alguna para continuar.");
+            alert("Has alcanzado el límite de 30 tasaciones guardadas.");
             return;
         }
 
-        if (!target.address) {
-            alert("Ingresa una dirección para la propiedad objetivo antes de guardar.");
+        // PROPER VALIDATION
+        if (!target.address || target.address.trim() === '') {
+            alert("Ingresa una dirección válida para la propiedad antes de guardar.");
             return;
         }
 
@@ -292,18 +310,19 @@ export const useValuation = () => {
             };
 
             if (currentValuationId) {
-                // Overwrite existing
+                // OVERWRITE LOGIC
                 await updateDoc(doc(db, `users/${user.uid}/saved_valuations`, currentValuationId), valuationData);
                 alert("Tasación actualizada correctamente.");
             } else {
-                // Create new
+                // NEW CREATE LOGIC
                 const docRef = await addDoc(collection(db, `users/${user.uid}/saved_valuations`), valuationData);
                 setCurrentValuationId(docRef.id);
+                // Also enable editing of this new valuation immediately
                 alert("Tasación guardada correctamente.");
             }
         } catch (error: any) {
             console.error("Save Error:", error);
-            alert("Error al guardar tasación: " + error.message);
+            alert("Error al guardar: " + error.message);
         }
     };
 
@@ -312,7 +331,6 @@ export const useValuation = () => {
         if (!confirm("¿Estás seguro de eliminar esta tasación?")) return;
         try {
             await deleteDoc(doc(db, `users/${user.uid}/saved_valuations`, id));
-            // If we deleted the one currently open, reset the ID to avoid phantom updates
             if (id === currentValuationId) {
                 setCurrentValuationId(null);
             }
@@ -327,14 +345,29 @@ export const useValuation = () => {
         try {
             setTarget(valuation.target);
             setComparables(valuation.comparables);
-            setCurrentValuationId(valuation.id); // Set the current ID
+            setCurrentValuationId(valuation.id);
 
             if (user && db) {
-                await setDoc(doc(db, `users/${user.uid}/data/valuation_active`), valuation.target, { merge: true });
+                const batch = writeBatch(db);
+
+                // 1. Update Target
+                const targetRef = doc(db, `users/${user.uid}/data/valuation_active`);
+                batch.set(targetRef, valuation.target, { merge: true });
+
+                // 2. Clear Existing Comparables
                 const compsRef = collection(db, `users/${user.uid}/comparables`);
                 const snapshot = await getDocs(query(compsRef));
-                await Promise.all(snapshot.docs.map(d => deleteDoc(d.ref)));
-                await Promise.all(valuation.comparables.map(c => addDoc(compsRef, c)));
+                snapshot.docs.forEach(d => batch.delete(d.ref));
+
+                // 3. Add New Comparables
+                // Note: Batched writes can't generate IDs automatically same way addDoc does for return,
+                // but we can create docs with new IDs.
+                valuation.comparables.forEach(c => {
+                    const newRef = doc(compsRef); // Generate ID
+                    batch.set(newRef, c);
+                });
+
+                await batch.commit();
             }
         } catch (error: any) {
             console.error("Load Error:", error);
