@@ -34,9 +34,13 @@ function Dashboard() {
   // I will use a local state for the modal since the hook didn't export it (I saw I didn't add it to hook return).
   // Wait, I didn't add `savedValuationsModalOpen` to hook. I only added the logic.
   // I will add it here.
-  const [savedValuationsModalOpen, setSavedValuationsModalOpen] = useState(false);
-  const [editingCompId, setEditingCompId] = useState<string | null>(null);
-  const [showOptionalTarget, setShowOptionalTarget] = useState(false);
+  const [brokerName, setBrokerName] = useState('Usuario TTasaciones');
+  const [matricula, setMatricula] = useState('');
+  const [clientName, setClientName] = useState('');
+  const [pdfTheme, setPdfTheme] = useState({
+    primary: '#4f46e5', // indigo-600
+    secondary: '#cbd5e1' // slate-300
+  });
 
   const editingComparable = useMemo(() =>
     comparables.find(c => c.id === editingCompId) || null
@@ -90,6 +94,7 @@ function Dashboard() {
             stats={stats}
             brokerName={brokerName}
             matricula={matricula}
+            clientName={clientName}
             theme={pdfTheme}
           />
         </div>
@@ -522,9 +527,19 @@ function Dashboard() {
                 <div className="p-4 space-y-4">
                   <div className="flex items-center gap-2 text-slate-800 mb-2">
                     <AlertCircle className="w-4 h-4 text-brand" />
-                    <h2 className="font-semibold text-xs uppercase tracking-wider">Datos del Profesional</h2>
+                    <h2 className="font-semibold text-xs uppercase tracking-wider">Datos del Reporte</h2>
                   </div>
                   <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-slate-500 uppercase font-medium">Cliente</label>
+                      <input
+                        type="text"
+                        value={clientName}
+                        onChange={e => setClientName(e.target.value)}
+                        className="w-full bg-slate-100 border-slate-200 rounded-lg px-3 py-2 mt-1 text-slate-800 focus:ring-brand focus:border-brand text-sm"
+                        placeholder="Nombre del Cliente"
+                      />
+                    </div>
                     <div>
                       <label className="text-xs text-slate-500 uppercase font-medium">Agente</label>
                       <input
@@ -544,36 +559,6 @@ function Dashboard() {
                         className="w-full bg-slate-100 border-slate-200 rounded-lg px-3 py-2 mt-1 text-slate-800 focus:ring-brand focus:border-brand text-sm"
                         placeholder="Ej: CUCICBA 1234"
                       />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-4 border-t border-slate-100">
-                  <div className="flex items-center gap-2 text-slate-800 mb-2">
-                    <h2 className="font-semibold text-xs uppercase tracking-wider">Diseño PDF</h2>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs text-slate-500 uppercase font-medium">Primario</label>
-                      <div className="flex items-center gap-2 mt-1">
-                        <input
-                          type="color"
-                          value={pdfTheme.primary}
-                          onChange={e => setPdfTheme({ ...pdfTheme, primary: e.target.value })}
-                          className="h-8 w-8 rounded-full cursor-pointer border-0 p-0 overflow-hidden shadow-sm"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs text-slate-500 uppercase font-medium">Secundario</label>
-                      <div className="flex items-center gap-2 mt-1">
-                        <input
-                          type="color"
-                          value={pdfTheme.secondary}
-                          onChange={e => setPdfTheme({ ...pdfTheme, secondary: e.target.value })}
-                          className="h-8 w-8 rounded-full cursor-pointer border-0 p-0 overflow-hidden shadow-sm"
-                        />
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -762,7 +747,7 @@ function Dashboard() {
                   target: target,
                   brokerName: brokerName || 'Usuario TTasaciones',
                   matricula: matricula || '',
-                  clientName: 'Cliente Final',
+                  clientName: clientName || 'Cliente Final',
                   ...valuation
                 }}
                 properties={processedComparables}

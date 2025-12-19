@@ -10,13 +10,14 @@ interface PDFGeneratorProps {
     stats: any;
     brokerName?: string;
     matricula?: string;
+    clientName?: string;
     theme?: {
         primary: string;
         secondary: string;
     };
 }
 
-const PDFGenerator = ({ target, comparables, valuation, stats, brokerName, matricula, theme }: PDFGeneratorProps) => {
+const PDFGenerator = ({ target, comparables, valuation, stats, brokerName, matricula, clientName, theme }: PDFGeneratorProps) => {
     const [isGenerating, setIsGenerating] = useState(false);
     const [mountNode, setMountNode] = useState<HTMLElement | null>(null);
 
@@ -86,7 +87,7 @@ const PDFGenerator = ({ target, comparables, valuation, stats, brokerName, matri
         target: target,
         brokerName: brokerName || 'Usuario TTasaciones',
         matricula: matricula || '',
-        clientName: 'Cliente Final',
+        clientName: clientName || 'Cliente Final',
         ...valuation
     };
 

@@ -29,9 +29,9 @@ const PropertyDetailPage = ({ property, index, theme }: { property: any, index: 
             <div className="h-64 mb-8">
                 {property.images && property.images.length > 0 ? (
                     <div className={`grid gap-4 h-full ${property.images.length === 1 ? 'grid-cols-1' :
-                            property.images.length === 2 ? 'grid-cols-2' :
-                                property.images.length === 3 ? 'grid-cols-2 grid-rows-2' :
-                                    'grid-cols-2 grid-rows-2'
+                        property.images.length === 2 ? 'grid-cols-2' :
+                            property.images.length === 3 ? 'grid-cols-2 grid-rows-2' :
+                                'grid-cols-2 grid-rows-2'
                         }`}>
                         {property.images.slice(0, 4).map((img: string, i: number) => {
                             // Logic for 3 items: Item 0 is row-span-2
@@ -85,7 +85,7 @@ const PropertyDetailPage = ({ property, index, theme }: { property: any, index: 
                     </div>
                 </div>
                 <div>
-                    <h3 className="text-lg font-bold text-slate-800 mb-4 border-b pb-1" style={{ borderColor: secondaryColor }}>Detalles y Características</h3>
+                    <h3 className="text-lg font-bold text-slate-800 mb-4 border-b pb-1" style={{ borderColor: secondaryColor }}>Detalles</h3>
                     <div className="space-y-2">
                         <div className="flex justify-between py-1 border-b border-dashed border-slate-200">
                             <span className="text-slate-600">Ambientes</span>
@@ -159,10 +159,7 @@ const PropertyDetailPage = ({ property, index, theme }: { property: any, index: 
                             <span className="text-slate-600">$/m² Homogenizado</span>
                             <span className="font-bold text-slate-800">U$S {pricePerM2.toLocaleString()}</span>
                         </div>
-                        <div className="flex justify-between py-1 border-b border-dashed border-slate-200">
-                            <span className="text-slate-600">Factor Homog.</span>
-                            <span className="font-bold text-slate-800">{property.homogenizationFactor}</span>
-                        </div>
+
                     </div>
                 </div>
             </div>
