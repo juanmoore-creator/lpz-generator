@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { db } from '../lib/firebase';
 import {
     doc, onSnapshot, setDoc, collection, addDoc,
-    updateDoc, deleteDoc, query, orderBy, getDocs, getDoc, writeBatch
+    updateDoc, deleteDoc, query, orderBy, getDocs, writeBatch
 } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import Papa from 'papaparse';
@@ -44,7 +44,7 @@ export const useValuation = () => {
         secondary: '#cbd5e1' // slate-300
     });
 
-    const [migrationDone, setMigrationDone] = useState(false);
+
 
     // --- Helpers ---
 
@@ -66,91 +66,15 @@ export const useValuation = () => {
     // --- Effects ---
 
     useEffect(() => {
-        if (!user || !db) return;
-        if (!user.uid) return; // Strict check
+        if (!user?.uid || !db) return;
 
         const paths = getPaths();
         if (!paths) return;
 
-        const { targetPath, comparablesPath, savedPath, oldBasePath } = paths;
+        const { targetPath, comparablesPath, savedPath } = paths;
 
         // Logging paths for debugging
         console.log("Setting up listeners with paths:", { targetPath, comparablesPath, savedPath });
-
-        // Migration Logic
-        const migrateData = async () => {
-            if (migrationDone) return;
-
-            try {
-                try {
-                    console.log("Checking migration target:", targetPath);
-                    const targetRef = doc(db, targetPath);
-                    const targetSnap = await getDoc(targetRef);
-
-                    if (!targetSnap.exists()) {
-                        const oldTargetRef = doc(db, `${oldBasePath}/data/valuation_active`);
-                        const oldTargetSnap = await getDoc(oldTargetRef);
-                        if (oldTargetSnap.exists()) {
-                            await setDoc(targetRef, oldTargetSnap.data());
-                            console.log("Migrated Target Property");
-                        }
-                    }
-                } catch (e) {
-                    console.warn("Migration (Target) skipped/failed:", e);
-                }
-
-                try {
-                    console.log("Checking migration comparables:", comparablesPath);
-                    const comparablesRef = collection(db, comparablesPath);
-                    const compSnap = await getDocs(comparablesRef);
-
-                    if (compSnap.empty) {
-                        const oldComparablesRef = collection(db, `${oldBasePath}/comparables`);
-                        const oldCompSnap = await getDocs(oldComparablesRef);
-
-                        if (!oldCompSnap.empty) {
-                            const batch = writeBatch(db);
-                            oldCompSnap.forEach(d => {
-                                batch.set(doc(comparablesRef, d.id), d.data());
-                            });
-                            await batch.commit();
-                            console.log(`Migrated ${oldCompSnap.size} comparables`);
-                        }
-                    }
-                } catch (e) {
-                    console.warn("Migration (Comparables) skipped/failed:", e);
-                }
-
-                try {
-                    console.log("Checking migration saved:", savedPath);
-                    const savedRef = collection(db, savedPath);
-                    const savedSnap = await getDocs(savedRef);
-
-                    if (savedSnap.empty) {
-                        const oldSavedRef = collection(db, `${oldBasePath}/saved_valuations`);
-                        const oldSavedSnap = await getDocs(oldSavedRef);
-
-                        if (!oldSavedSnap.empty) {
-                            const batch = writeBatch(db);
-                            oldSavedSnap.forEach(d => {
-                                batch.set(doc(savedRef, d.id), d.data());
-                            });
-                            await batch.commit();
-                            console.log(`Migrated ${oldSavedSnap.size} saved valuations`);
-                        }
-                    }
-                } catch (e) {
-                    console.warn("Migration (Saved) skipped/failed:", e);
-                }
-
-                setMigrationDone(true);
-
-            } catch (error) {
-                console.error("Migration Fatal Error:", error);
-            }
-        };
-
-        migrateData();
 
         // Subscriptions
         const targetRef = doc(db, targetPath);
@@ -186,7 +110,7 @@ export const useValuation = () => {
             unsubComparables();
             unsubSaved();
         };
-    }, [user, migrationDone]);
+    }, [user]);
 
     // --- Actions ---
 
@@ -318,25 +242,25 @@ export const useValuation = () => {
 
     const handleSaveValuation = async () => {
         if (!user || !db) {
-            alert("Debes estar conectado para guardar.");
+            window.alert("Debes estar conectado para guardar.");
             return;
         }
 
         const paths = getPaths();
         if (!paths) {
-            alert("Error: Usuario no identificado correctamente.");
+            window.alert("Error: Usuario no identificado correctamente.");
             return;
         }
 
         // LIMIT CHECK
         if (!currentValuationId && savedValuations.length >= 30) {
-            alert("Has alcanzado el límite de 30 tasaciones guardadas.");
+            window.alert("Has alcanzado el límite de 30 tasaciones guardadas.");
             return;
         }
 
         // PROPER VALIDATION
         if (!target.address || target.address.trim() === '') {
-            alert("Ingresa una dirección válida para la propiedad antes de guardar.");
+            window.alert("Ingresa una dirección válida para la propiedad antes de guardar.");
             return;
         }
 
@@ -350,26 +274,27 @@ export const useValuation = () => {
             };
 
             if (currentValuationId) {
-                // OVERWRITE LOGIC
-                // Using setDoc with ID as requested to ensure it works even if doc is somehow missing
+                // UPDATE / OVERWRITE LOGIC
                 const docPath = `${paths.savedPath}/${currentValuationId}`;
                 console.log("Saving (Overwrite) to:", docPath);
 
-                // Using setDoc with merge: true instead of updateDoc
                 await setDoc(doc(db, paths.savedPath, currentValuationId), valuationData, { merge: true });
-                console.log('Escritura exitosa (Update)');
-                alert("Tasación actualizada correctamente.");
+
+                console.log('Update successful');
+                window.alert("Tasación actualizada correctamente.");
             } else {
                 // NEW CREATE LOGIC
                 console.log("Saving (New) to:", paths.savedPath);
+
                 const docRef = await addDoc(collection(db, paths.savedPath), valuationData);
-                console.log('Escritura exitosa');
+
+                console.log('Create successful, new ID:', docRef.id);
                 setCurrentValuationId(docRef.id);
-                alert("Tasación guardada correctamente.");
+                window.alert("Tasación guardada correctamente.");
             }
         } catch (error: any) {
             console.error("Save Error:", error);
-            alert("Error al guardar: " + error.message);
+            window.alert("Error al guardar: " + (error?.message || error));
         }
     };
 
