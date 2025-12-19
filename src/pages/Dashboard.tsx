@@ -245,6 +245,7 @@ function Dashboard() {
                     images={target.images || []}
                     onImagesChange={(imgs) => updateTarget({ images: imgs })}
                     label="Fotos de la Propiedad"
+                    maxImages={4}
                   />
                 </div>
 
@@ -690,6 +691,7 @@ function Dashboard() {
                       images={editingComparable.images || []}
                       onImagesChange={(imgs) => updateComparable(editingComparable.id, { images: imgs })}
                       label="Fotos del Comparable"
+                      maxImages={4}
                     />
                   </div>
 

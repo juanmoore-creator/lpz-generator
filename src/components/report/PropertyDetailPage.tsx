@@ -28,12 +28,26 @@ const PropertyDetailPage = ({ property, index, theme }: { property: any, index: 
 
             <div className="h-64 mb-8">
                 {property.images && property.images.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-4 h-full">
-                        {property.images.slice(0, 2).map((img: string, i: number) => (
-                            <div key={i} className={`relative h-full w-full rounded-lg overflow-hidden border border-slate-200 ${property.images.length === 1 ? 'col-span-2' : ''}`}>
-                                <img src={img} alt={`Vista ${i + 1}`} className="w-full h-full object-cover" />
-                            </div>
-                        ))}
+                    <div className={`grid gap-4 h-full ${property.images.length === 1 ? 'grid-cols-1' :
+                            property.images.length === 2 ? 'grid-cols-2' :
+                                property.images.length === 3 ? 'grid-cols-2 grid-rows-2' :
+                                    'grid-cols-2 grid-rows-2'
+                        }`}>
+                        {property.images.slice(0, 4).map((img: string, i: number) => {
+                            // Logic for 3 items: Item 0 is row-span-2
+                            const isThreeItems = property.images.slice(0, 4).length === 3;
+                            let className = "relative h-full w-full rounded-lg overflow-hidden border border-slate-200";
+
+                            if (isThreeItems && i === 0) {
+                                className += " row-span-2";
+                            }
+
+                            return (
+                                <div key={i} className={className}>
+                                    <img src={img} alt={`Vista ${i + 1}`} className="w-full h-full object-cover" />
+                                </div>
+                            );
+                        })}
                     </div>
                 ) : (
                     <div className="h-full bg-slate-100 flex items-center justify-center rounded-lg border border-slate-200">
