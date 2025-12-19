@@ -46,32 +46,48 @@ export const useValuation = () => {
 
     const [migrationDone, setMigrationDone] = useState(false);
 
+    // --- Helpers ---
+
+    // Helper to get formatted paths and ensure user exists
+    const getPaths = () => {
+        if (!user || !user.uid) {
+            console.warn("Attempted to get paths with no user");
+            return null;
+        }
+        return {
+            basePath: `users/${user.uid}`,
+            targetPath: `users/${user.uid}/data/valuation_active`,
+            comparablesPath: `users/${user.uid}/comparables`,
+            savedPath: `users/${user.uid}/saved_valuations`,
+            oldBasePath: `artifacts/tasadorpro/users/${user.uid}`
+        };
+    };
+
     // --- Effects ---
 
     useEffect(() => {
         if (!user || !db) return;
+        if (!user.uid) return; // Strict check
 
-        // Path definitions
-        const basePath = `users/${user.uid}`;
-        const targetPath = `${basePath}/data/valuation_active`;
-        const comparablesPath = `${basePath}/comparables`;
-        const savedPath = `${basePath}/saved_valuations`;
+        const paths = getPaths();
+        if (!paths) return;
+
+        const { targetPath, comparablesPath, savedPath, oldBasePath } = paths;
+
+        // Logging paths for debugging
+        console.log("Setting up listeners with paths:", { targetPath, comparablesPath, savedPath });
 
         // Migration Logic
         const migrateData = async () => {
             if (migrationDone) return;
 
             try {
-                // We use a safe check. If offline/error, we log and skip migration to avoid blocking.
-                // Migration is opportunistic.
-
-                // Check if new target exists
                 try {
+                    console.log("Checking migration target:", targetPath);
                     const targetRef = doc(db, targetPath);
                     const targetSnap = await getDoc(targetRef);
 
                     if (!targetSnap.exists()) {
-                        const oldBasePath = `artifacts/tasadorpro/users/${user.uid}`;
                         const oldTargetRef = doc(db, `${oldBasePath}/data/valuation_active`);
                         const oldTargetSnap = await getDoc(oldTargetRef);
                         if (oldTargetSnap.exists()) {
@@ -80,16 +96,15 @@ export const useValuation = () => {
                         }
                     }
                 } catch (e) {
-                    console.warn("Migration (Target) skipped/failed (likely offline):", e);
+                    console.warn("Migration (Target) skipped/failed:", e);
                 }
 
-                // Check comparables
                 try {
+                    console.log("Checking migration comparables:", comparablesPath);
                     const comparablesRef = collection(db, comparablesPath);
                     const compSnap = await getDocs(comparablesRef);
 
                     if (compSnap.empty) {
-                        const oldBasePath = `artifacts/tasadorpro/users/${user.uid}`;
                         const oldComparablesRef = collection(db, `${oldBasePath}/comparables`);
                         const oldCompSnap = await getDocs(oldComparablesRef);
 
@@ -106,13 +121,12 @@ export const useValuation = () => {
                     console.warn("Migration (Comparables) skipped/failed:", e);
                 }
 
-                // Check saved valuations
                 try {
+                    console.log("Checking migration saved:", savedPath);
                     const savedRef = collection(db, savedPath);
                     const savedSnap = await getDocs(savedRef);
 
                     if (savedSnap.empty) {
-                        const oldBasePath = `artifacts/tasadorpro/users/${user.uid}`;
                         const oldSavedRef = collection(db, `${oldBasePath}/saved_valuations`);
                         const oldSavedSnap = await getDocs(oldSavedRef);
 
@@ -181,12 +195,20 @@ export const useValuation = () => {
     const updateTarget = async (updates: Partial<TargetProperty>) => {
         const newTarget = { ...target, ...updates };
         setTarget(newTarget); // Optimistic
+
+        const paths = getPaths();
+        if (!paths) return;
+
         if (user && db) {
-            await setDoc(doc(db, `users/${user.uid}/data/valuation_active`), newTarget, { merge: true });
+            console.log("Updating target at:", paths.targetPath);
+            await setDoc(doc(db, paths.targetPath), newTarget, { merge: true });
         }
     };
 
     const addComparable = async () => {
+        const paths = getPaths();
+        if (!paths) return; // Strict check
+
         const newComp: Omit<Comparable, 'id'> = {
             address: 'Nueva Propiedad',
             price: 100000,
@@ -210,23 +232,30 @@ export const useValuation = () => {
             images: []
         };
         if (user && db) {
-            await addDoc(collection(db, `users/${user.uid}/comparables`), newComp);
+            console.log("Adding comparable to:", paths.comparablesPath);
+            await addDoc(collection(db, paths.comparablesPath), newComp);
         } else {
             setComparables([...comparables, { ...newComp, id: Math.random().toString() }]);
         }
     };
 
     const updateComparable = async (id: string, updates: Partial<Comparable>) => {
-        if (user && db) {
-            await updateDoc(doc(db, `users/${user.uid}/comparables`, id), updates);
+        const paths = getPaths();
+        if (user && db && paths) {
+            const compPath = `${paths.comparablesPath}/${id}`;
+            console.log("Updating comparable at:", compPath);
+            await updateDoc(doc(db, compPath), updates);
         } else {
             setComparables(comparables.map(c => c.id === id ? { ...c, ...updates } : c));
         }
     };
 
     const deleteComparable = async (id: string) => {
-        if (user && db) {
-            await deleteDoc(doc(db, `users/${user.uid}/comparables`, id));
+        const paths = getPaths();
+        if (user && db && paths) {
+            const compPath = `${paths.comparablesPath}/${id}`;
+            console.log("Deleting comparable at:", compPath);
+            await deleteDoc(doc(db, compPath));
         } else {
             setComparables(comparables.filter(c => c.id !== id));
         }
@@ -236,6 +265,9 @@ export const useValuation = () => {
         if (comparables.length > 0 || target.address) {
             if (!confirm("¿Estás seguro de crear una nueva tasación? Se perderán los datos actuales no guardados.")) return;
         }
+
+        const paths = getPaths();
+        if (!paths) return;
 
         const emptyTarget: TargetProperty = {
             address: '',
@@ -263,14 +295,15 @@ export const useValuation = () => {
         setCurrentValuationId(null);
 
         if (user && db) {
+            console.log("Starting new valuation reset");
             const batch = writeBatch(db);
 
             // 1. Reset Target
-            const targetRef = doc(db, `users/${user.uid}/data/valuation_active`);
+            const targetRef = doc(db, paths.targetPath);
             batch.set(targetRef, emptyTarget);
 
             // 2. Clear Comparables
-            const compsRef = collection(db, `users/${user.uid}/comparables`);
+            const compsRef = collection(db, paths.comparablesPath);
             const q = query(compsRef);
             // Must fetch to get IDs
             const snapshot = await getDocs(q);
@@ -279,12 +312,19 @@ export const useValuation = () => {
             });
 
             await batch.commit();
+            console.log("New valuation reset committed");
         }
     };
 
     const handleSaveValuation = async () => {
         if (!user || !db) {
             alert("Debes estar conectado para guardar.");
+            return;
+        }
+
+        const paths = getPaths();
+        if (!paths) {
+            alert("Error: Usuario no identificado correctamente.");
             return;
         }
 
@@ -311,13 +351,18 @@ export const useValuation = () => {
 
             if (currentValuationId) {
                 // OVERWRITE LOGIC
-                await updateDoc(doc(db, `users/${user.uid}/saved_valuations`, currentValuationId), valuationData);
+                // Using setDoc with ID as requested to ensure it works even if doc is somehow missing
+                const docPath = `${paths.savedPath}/${currentValuationId}`;
+                console.log("Saving (Overwrite) to:", docPath);
+
+                // Using setDoc with merge: true instead of updateDoc
+                await setDoc(doc(db, paths.savedPath, currentValuationId), valuationData, { merge: true });
                 alert("Tasación actualizada correctamente.");
             } else {
                 // NEW CREATE LOGIC
-                const docRef = await addDoc(collection(db, `users/${user.uid}/saved_valuations`), valuationData);
+                console.log("Saving (New) to:", paths.savedPath);
+                const docRef = await addDoc(collection(db, paths.savedPath), valuationData);
                 setCurrentValuationId(docRef.id);
-                // Also enable editing of this new valuation immediately
                 alert("Tasación guardada correctamente.");
             }
         } catch (error: any) {
@@ -327,10 +372,15 @@ export const useValuation = () => {
     };
 
     const handleDeleteValuation = async (id: string) => {
-        if (!user || !db) return;
+        const paths = getPaths();
+        if (!user || !db || !paths) return;
+
         if (!confirm("¿Estás seguro de eliminar esta tasación?")) return;
         try {
-            await deleteDoc(doc(db, `users/${user.uid}/saved_valuations`, id));
+            const docPath = `${paths.savedPath}/${id}`;
+            console.log("Deleting valuation at:", docPath);
+            await deleteDoc(doc(db, docPath));
+
             if (id === currentValuationId) {
                 setCurrentValuationId(null);
             }
@@ -342,32 +392,36 @@ export const useValuation = () => {
 
     const handleLoadValuation = async (valuation: SavedValuation) => {
         if (!confirm("Cargar esta tasación reemplazará los datos actuales. ¿Continuar?")) return;
+
+        const paths = getPaths();
+        if (!paths) return;
+
         try {
             setTarget(valuation.target);
             setComparables(valuation.comparables);
             setCurrentValuationId(valuation.id);
 
             if (user && db) {
+                console.log("Loading valuation, batch update started");
                 const batch = writeBatch(db);
 
                 // 1. Update Target
-                const targetRef = doc(db, `users/${user.uid}/data/valuation_active`);
+                const targetRef = doc(db, paths.targetPath);
                 batch.set(targetRef, valuation.target, { merge: true });
 
                 // 2. Clear Existing Comparables
-                const compsRef = collection(db, `users/${user.uid}/comparables`);
+                const compsRef = collection(db, paths.comparablesPath);
                 const snapshot = await getDocs(query(compsRef));
                 snapshot.docs.forEach(d => batch.delete(d.ref));
 
                 // 3. Add New Comparables
-                // Note: Batched writes can't generate IDs automatically same way addDoc does for return,
-                // but we can create docs with new IDs.
                 valuation.comparables.forEach(c => {
                     const newRef = doc(compsRef); // Generate ID
                     batch.set(newRef, c);
                 });
 
                 await batch.commit();
+                console.log("Valuation loaded successfully");
             }
         } catch (error: any) {
             console.error("Load Error:", error);
@@ -402,6 +456,8 @@ export const useValuation = () => {
             alert("Link inválido. Asegúrate de copiar el link completo de tu Google Sheet.");
             return;
         }
+
+        const paths = getPaths();
 
         try {
             addLog("Fetching data from Google Sheet...");
@@ -454,8 +510,14 @@ export const useValuation = () => {
                             });
                         }
 
-                        if (user && db) {
-                            await Promise.all(newComps.map(c => addDoc(collection(db, `users/${user.uid}/comparables`), c)));
+                        if (user && db && paths) {
+                            console.log("Importing batch to:", paths.comparablesPath);
+                            const batch = writeBatch(db);
+                            newComps.forEach(c => {
+                                const newRef = doc(collection(db, paths.comparablesPath));
+                                batch.set(newRef, c);
+                            });
+                            await batch.commit();
                         } else {
                             setComparables(prev => [...prev, ...newComps.map(c => ({ ...c, id: Math.random().toString() }))]);
                         }
