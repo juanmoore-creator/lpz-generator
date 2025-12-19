@@ -516,6 +516,27 @@ export const useValuation = () => {
         };
     }, [stats, targetHomogenizedSurface]);
 
+    const emergencySave = async () => {
+        try {
+            console.log("🔥 INICIANDO SALVADO DE EMERGENCIA...");
+            if (!user) {
+                alert("NO USER");
+                return;
+            }
+            // Direct write to TEST_COLLECTION
+            await setDoc(doc(db, 'TEST_COLLECTION', 'test_doc'), {
+                time: Date.now(),
+                uid: user.uid,
+                status: 'IT WORKS'
+            });
+            console.log("🔥 ESCRITURA EN TEST_COLLECTION EXITOSA");
+            alert("🔥 ÉXITO: Revisa si existe la colección 'TEST_COLLECTION' en Firebase Console.");
+        } catch (e: any) {
+            console.error("🔥 ERROR EMERGENCY SAVE:", e);
+            alert("🔥 FALLÓ: " + e.message);
+        }
+    };
+
     return {
         target, setTarget, updateTarget,
         comparables, setComparables, addComparable, updateComparable, deleteComparable, processedComparables,
@@ -524,6 +545,7 @@ export const useValuation = () => {
         brokerName, setBrokerName,
         matricula, setMatricula,
         pdfTheme, setPdfTheme,
-        stats, valuation, targetHomogenizedSurface
+        stats, valuation, targetHomogenizedSurface,
+        emergencySave
     };
 };

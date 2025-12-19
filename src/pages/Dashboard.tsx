@@ -29,7 +29,8 @@ function Dashboard() {
     brokerName, setBrokerName,
     matricula, setMatricula,
     pdfTheme, setPdfTheme,
-    stats, valuation, targetHomogenizedSurface
+    stats, valuation, targetHomogenizedSurface,
+    emergencySave
   } = useValuation();
 
   // Modal state - this is UI state so we can keep it here or if strict logic moved to hook.
@@ -114,13 +115,22 @@ function Dashboard() {
         </div>
       </div>
 
-      {/* DEBUG BUTTON */}
-      <button
-        onClick={handleForceWrite}
-        className="fixed bottom-4 right-4 z-50 bg-red-600 text-white px-4 py-2 rounded-full shadow-lg hover:bg-red-700 font-bold flex items-center gap-2"
-      >
-        <Database className="w-4 h-4" /> FORZAR ESCRITURA
-      </button>
+      {/* DEBUG BUTTONS */}
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+        <button
+          onClick={handleForceWrite}
+          className="bg-red-600 text-white px-4 py-2 rounded-full shadow-lg hover:bg-red-700 font-bold flex items-center gap-2"
+        >
+          <Database className="w-4 h-4" /> FORZAR ESCRITURA
+        </button>
+
+        <button
+          onClick={emergencySave}
+          className="bg-orange-600 text-white px-4 py-2 rounded-full shadow-lg hover:bg-orange-700 font-bold flex items-center gap-2"
+        >
+          <AlertCircle className="w-4 h-4" /> SALVADO EMERGENCIA
+        </button>
+      </div>
 
       {/* Saved Valuations Modal */}
       {savedValuationsModalOpen && (
