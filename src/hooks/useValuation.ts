@@ -240,6 +240,7 @@ export const useValuation = () => {
         }
     };
 
+
     const handleSaveValuation = async () => {
         if (!user || !db) {
             window.alert("Debes estar conectado para guardar.");
@@ -247,286 +248,279 @@ export const useValuation = () => {
         }
 
         const paths = getPaths();
-        const handleSaveValuation = async () => {
-            if (!user || !db) {
-                window.alert("Debes estar conectado para guardar.");
-                return;
-            }
+        if (!paths) {
+            window.alert("Error: Usuario no identificado correctamente.");
+            return;
+        }
 
-            const paths = getPaths();
-            if (!paths) {
-                window.alert("Error: Usuario no identificado correctamente.");
-                return;
-            }
+        // LIMIT CHECK
+        if (!currentValuationId && savedValuations.length >= 30) {
+            window.alert("Has alcanzado el límite de 30 tasaciones guardadas.");
+            return;
+        }
 
-            // LIMIT CHECK
-            if (!currentValuationId && savedValuations.length >= 30) {
-                window.alert("Has alcanzado el límite de 30 tasaciones guardadas.");
-                return;
-            }
+        // PROPER VALIDATION
+        if (!target.address || target.address.trim() === '') {
+            window.alert("Ingresa una dirección válida para la propiedad antes de guardar.");
+            return;
+        }
 
-            // PROPER VALIDATION
-            if (!target.address || target.address.trim() === '') {
-                window.alert("Ingresa una dirección válida para la propiedad antes de guardar.");
-                return;
-            }
+        try {
+            // WAKE UP FIRESTORE LATEST
+            // Ensure user root document exists to initialize collection if empty
+            await setDoc(doc(db, 'users', user.uid), { lastActive: Date.now() }, { merge: true });
 
-            try {
-                // WAKE UP FIRESTORE LATEST
-                // Ensure user root document exists to initialize collection if empty
-                await setDoc(doc(db, 'users', user.uid), { lastActive: Date.now() }, { merge: true });
-
-                const valuationName = `${target.address} - ${new Date().toLocaleDateString()}`;
-                const valuationData = {
-                    date: Date.now(),
-                    target: target,
-                    comparables: comparables,
-                    name: valuationName
-                };
-
-                let docRef;
-
-                if (currentValuationId) {
-                    // UPDATE EXISTING
-                    docRef = doc(db, paths.savedPath, currentValuationId);
-                } else {
-                    // CREATE NEW
-                    // STRICT: Generate ID first, then setDoc
-                    docRef = doc(collection(db, paths.savedPath));
-                    // SYNC STATE IMMEDIATELY
-                    setCurrentValuationId(docRef.id);
-                }
-
-                // UNIFIED WRITE - ALWAYS setDoc with Merge
-                await setDoc(docRef, valuationData, { merge: true });
-
-                console.log('✅ Documento guardado con éxito en:', docRef.path);
-                window.alert("Tasación guardada correctamente.");
-
-            } catch (error: any) {
-                console.error("Save Error:", error);
-                window.alert("Error al guardar: " + (error?.message || error));
-            }
-        };
-
-        const handleDeleteValuation = async (id: string) => {
-            const paths = getPaths();
-            if (!user || !db || !paths) return;
-
-            if (!confirm("¿Estás seguro de eliminar esta tasación?")) return;
-            try {
-                const docPath = `${paths.savedPath}/${id}`;
-                console.log("Deleting valuation at:", docPath);
-                await deleteDoc(doc(db, docPath));
-
-                if (id === currentValuationId) {
-                    setCurrentValuationId(null);
-                }
-            } catch (error: any) {
-                console.error("Delete Error:", error);
-                alert("Error al eliminar.");
-            }
-        };
-
-        const handleLoadValuation = async (valuation: SavedValuation) => {
-            if (!confirm("Cargar esta tasación reemplazará los datos actuales. ¿Continuar?")) return;
-
-            const paths = getPaths();
-            if (!paths) return;
-
-            try {
-                setTarget(valuation.target);
-                setComparables(valuation.comparables);
-                setCurrentValuationId(valuation.id);
-
-                if (user && db) {
-                    console.log("Loading valuation, batch update started");
-                    const batch = writeBatch(db);
-
-                    // 1. Update Target
-                    const targetRef = doc(db, paths.targetPath);
-                    batch.set(targetRef, valuation.target, { merge: true });
-
-                    // 2. Clear Existing Comparables
-                    const compsRef = collection(db, paths.comparablesPath);
-                    const snapshot = await getDocs(query(compsRef));
-                    snapshot.docs.forEach(d => batch.delete(d.ref));
-
-                    // 3. Add New Comparables
-                    valuation.comparables.forEach(c => {
-                        const newRef = doc(compsRef); // Generate ID
-                        batch.set(newRef, c);
-                    });
-
-                    await batch.commit();
-                    console.log("Valuation loaded successfully");
-                }
-            } catch (error: any) {
-                console.error("Load Error:", error);
-                alert("Error al cargar tasación.");
-            }
-        };
-
-        // --- Google Sheets Integration ---
-
-        const [sheetUrl, setSheetUrl] = useState('');
-
-        const getSheetCsvUrl = (url: string) => {
-            try {
-                const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-                if (match && match[1]) {
-                    return `https://docs.google.com/spreadsheets/d/${match[1]}/gviz/tq?tqx=out:csv`;
-                }
-                return null;
-            } catch (e) {
-                return null;
-            }
-        };
-
-        const handleImportFromSheet = async () => {
-            if (!sheetUrl) {
-                alert("Por favor ingresa el link de tu Google Sheet (debe ser público).");
-                return;
-            }
-
-            const csvUrl = getSheetCsvUrl(sheetUrl);
-            if (!csvUrl) {
-                alert("Link inválido. Asegúrate de copiar el link completo de tu Google Sheet.");
-                return;
-            }
-
-            const paths = getPaths();
-
-            try {
-                addLog("Fetching data from Google Sheet...");
-                const urlWithCacheBuster = `${csvUrl}&t=${Date.now()}`;
-                const response = await fetch(urlWithCacheBuster);
-                if (!response.ok) throw new Error("Failed to fetch sheet");
-                const text = await response.text();
-
-                Papa.parse(text, {
-                    header: true,
-                    skipEmptyLines: true,
-                    transformHeader: (h: string) => h.trim(),
-                    complete: async (results: any) => {
-                        try {
-                            const rows = results.data as any[];
-                            const newComps: Omit<Comparable, 'id'>[] = [];
-
-                            const cleanNumber = (val: any): number => {
-                                if (!val) return 0;
-                                let str = val.toString();
-                                str = str.replace(/[Uu$sSDdm²\s]/g, '');
-                                str = str.replace(/\./g, '').replace(',', '.');
-                                return parseFloat(str) || 0;
-                            };
-
-                            for (const row of rows) {
-                                const address = row['Dirección'] || row['Address'] || 'Sin dirección';
-                                if ((!address || address === 'Sin dirección') && !row['Precio']) continue;
-
-                                const price = cleanNumber(row['Precio'] || row['Price']);
-                                const covered = cleanNumber(row['Sup. Cubierta'] || row['Covered Surface']);
-                                const uncovered = cleanNumber(row['Sup. Descubierta'] || row['Uncovered Surface']);
-
-                                const typeRaw = (row['Tipo Sup'] || row['Surface Type'] || '').trim();
-                                const type = SURFACE_TYPES.includes(typeRaw as any) ? (typeRaw as SurfaceType) : 'Ninguno';
-
-                                const factorRaw = row['Factor'] ? cleanNumber(row['Factor']) : NaN;
-                                const factor = (factorRaw > 0) ? factorRaw : DEFAULT_FACTORS[type] || 1;
-
-                                const days = cleanNumber(row['Días'] || row['Days']);
-
-                                newComps.push({
-                                    address,
-                                    price,
-                                    coveredSurface: covered,
-                                    uncoveredSurface: uncovered,
-                                    surfaceType: type,
-                                    homogenizationFactor: factor,
-                                    daysOnMarket: days
-                                });
-                            }
-
-                            if (user && db && paths) {
-                                console.log("Importing batch to:", paths.comparablesPath);
-                                const batch = writeBatch(db);
-                                newComps.forEach(c => {
-                                    const newRef = doc(collection(db, paths.comparablesPath));
-                                    batch.set(newRef, c);
-                                });
-                                await batch.commit();
-                            } else {
-                                setComparables(prev => [...prev, ...newComps.map(c => ({ ...c, id: Math.random().toString() }))]);
-                            }
-
-                            addLog(`Successfully imported ${newComps.length} rows from Sheet`);
-                        } catch (err: any) {
-                            console.error("Parse Logic Error:", err);
-                            alert(`Error processing data: ${err.message}`);
-                        }
-                    },
-                    error: (err: any) => {
-                        console.error("CSV Parse Error:", err);
-                        alert("Error parsing Sheet data.");
-                    }
-                });
-            } catch (error: any) {
-                console.error("Sheet Import Error:", error);
-                alert("Error importando desde Sheet. Asegúrate que esté configurada como 'Cualquiera con el enlace puede ver'.");
-            }
-        };
-
-        // --- Calculations ---
-
-        const calculateHomogenizedSurface = (covered: number, uncovered: number, factor: number) => {
-            return covered + (uncovered * factor);
-        };
-
-        const calculateHomogenizedPrice = (price: number, hSurface: number) => {
-            if (hSurface === 0) return 0;
-            return price / hSurface;
-        };
-
-        const targetHomogenizedSurface = calculateHomogenizedSurface(target.coveredSurface, target.uncoveredSurface, target.homogenizationFactor);
-
-        const processedComparables = useMemo(() => {
-            return comparables.map(c => {
-                const hSurface = calculateHomogenizedSurface(c.coveredSurface, c.uncoveredSurface, c.homogenizationFactor);
-                const hPrice = calculateHomogenizedPrice(c.price, hSurface);
-                return { ...c, hSurface, hPrice };
-            }).filter(c => c.hPrice > 0);
-        }, [comparables]);
-
-        const stats = useMemo(() => {
-            if (processedComparables.length === 0) return { avg: 0, min: 0, max: 0, terciles: [0, 0, 0] };
-            const prices = processedComparables.map(c => c.hPrice).sort((a, b) => a - b);
-            const sum = prices.reduce((a, b) => a + b, 0);
-            const avg = sum / prices.length;
-            const min = prices[0];
-            const max = prices[prices.length - 1];
-            const t1 = prices[Math.floor(prices.length / 3)];
-            const t2 = prices[Math.floor(2 * prices.length / 3)];
-            return { avg, min, max, terciles: [t1, avg, t2] };
-        }, [processedComparables]);
-
-        const valuation = useMemo(() => {
-            if (!targetHomogenizedSurface) return { low: 0, market: 0, high: 0 };
-            return {
-                low: stats.terciles[0] * targetHomogenizedSurface,
-                market: stats.avg * targetHomogenizedSurface,
-                high: stats.terciles[2] * targetHomogenizedSurface
+            const valuationName = `${target.address} - ${new Date().toLocaleDateString()}`;
+            const valuationData = {
+                date: Date.now(),
+                target: target,
+                comparables: comparables,
+                name: valuationName
             };
-        }, [stats, targetHomogenizedSurface]);
 
-        return {
-            target, setTarget, updateTarget,
-            comparables, setComparables, addComparable, updateComparable, deleteComparable, processedComparables,
-            savedValuations, handleNewValuation, handleSaveValuation, handleDeleteValuation, handleLoadValuation,
-            sheetUrl, setSheetUrl, handleImportFromSheet,
-            brokerName, setBrokerName,
-            matricula, setMatricula,
-            pdfTheme, setPdfTheme,
-            stats, valuation, targetHomogenizedSurface
-        };
+            let docRef;
+
+            if (currentValuationId) {
+                // UPDATE EXISTING
+                docRef = doc(db, paths.savedPath, currentValuationId);
+            } else {
+                // CREATE NEW
+                // STRICT: Generate ID first, then setDoc
+                docRef = doc(collection(db, paths.savedPath));
+                // SYNC STATE IMMEDIATELY
+                setCurrentValuationId(docRef.id);
+            }
+
+            // UNIFIED WRITE - ALWAYS setDoc with Merge
+            await setDoc(docRef, valuationData, { merge: true });
+
+            console.log('✅ Documento guardado con éxito en:', docRef.path);
+            window.alert("Tasación guardada correctamente.");
+
+        } catch (error: any) {
+            console.error("Save Error:", error);
+            window.alert("Error al guardar: " + (error?.message || error));
+        }
     };
+
+    const handleDeleteValuation = async (id: string) => {
+        const paths = getPaths();
+        if (!user || !db || !paths) return;
+
+        if (!confirm("¿Estás seguro de eliminar esta tasación?")) return;
+        try {
+            const docPath = `${paths.savedPath}/${id}`;
+            console.log("Deleting valuation at:", docPath);
+            await deleteDoc(doc(db, docPath));
+
+            if (id === currentValuationId) {
+                setCurrentValuationId(null);
+            }
+        } catch (error: any) {
+            console.error("Delete Error:", error);
+            alert("Error al eliminar.");
+        }
+    };
+
+    const handleLoadValuation = async (valuation: SavedValuation) => {
+        if (!confirm("Cargar esta tasación reemplazará los datos actuales. ¿Continuar?")) return;
+
+        const paths = getPaths();
+        if (!paths) return;
+
+        try {
+            setTarget(valuation.target);
+            setComparables(valuation.comparables);
+            setCurrentValuationId(valuation.id);
+
+            if (user && db) {
+                console.log("Loading valuation, batch update started");
+                const batch = writeBatch(db);
+
+                // 1. Update Target
+                const targetRef = doc(db, paths.targetPath);
+                batch.set(targetRef, valuation.target, { merge: true });
+
+                // 2. Clear Existing Comparables
+                const compsRef = collection(db, paths.comparablesPath);
+                const snapshot = await getDocs(query(compsRef));
+                snapshot.docs.forEach(d => batch.delete(d.ref));
+
+                // 3. Add New Comparables
+                valuation.comparables.forEach(c => {
+                    const newRef = doc(compsRef); // Generate ID
+                    batch.set(newRef, c);
+                });
+
+                await batch.commit();
+                console.log("Valuation loaded successfully");
+            }
+        } catch (error: any) {
+            console.error("Load Error:", error);
+            alert("Error al cargar tasación.");
+        }
+    };
+
+    // --- Google Sheets Integration ---
+
+    const [sheetUrl, setSheetUrl] = useState('');
+
+    const getSheetCsvUrl = (url: string) => {
+        try {
+            const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+            if (match && match[1]) {
+                return `https://docs.google.com/spreadsheets/d/${match[1]}/gviz/tq?tqx=out:csv`;
+            }
+            return null;
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const handleImportFromSheet = async () => {
+        if (!sheetUrl) {
+            alert("Por favor ingresa el link de tu Google Sheet (debe ser público).");
+            return;
+        }
+
+        const csvUrl = getSheetCsvUrl(sheetUrl);
+        if (!csvUrl) {
+            alert("Link inválido. Asegúrate de copiar el link completo de tu Google Sheet.");
+            return;
+        }
+
+        const paths = getPaths();
+
+        try {
+            addLog("Fetching data from Google Sheet...");
+            const urlWithCacheBuster = `${csvUrl}&t=${Date.now()}`;
+            const response = await fetch(urlWithCacheBuster);
+            if (!response.ok) throw new Error("Failed to fetch sheet");
+            const text = await response.text();
+
+            Papa.parse(text, {
+                header: true,
+                skipEmptyLines: true,
+                transformHeader: (h: string) => h.trim(),
+                complete: async (results: any) => {
+                    try {
+                        const rows = results.data as any[];
+                        const newComps: Omit<Comparable, 'id'>[] = [];
+
+                        const cleanNumber = (val: any): number => {
+                            if (!val) return 0;
+                            let str = val.toString();
+                            str = str.replace(/[Uu$sSDdm²\s]/g, '');
+                            str = str.replace(/\./g, '').replace(',', '.');
+                            return parseFloat(str) || 0;
+                        };
+
+                        for (const row of rows) {
+                            const address = row['Dirección'] || row['Address'] || 'Sin dirección';
+                            if ((!address || address === 'Sin dirección') && !row['Precio']) continue;
+
+                            const price = cleanNumber(row['Precio'] || row['Price']);
+                            const covered = cleanNumber(row['Sup. Cubierta'] || row['Covered Surface']);
+                            const uncovered = cleanNumber(row['Sup. Descubierta'] || row['Uncovered Surface']);
+
+                            const typeRaw = (row['Tipo Sup'] || row['Surface Type'] || '').trim();
+                            const type = SURFACE_TYPES.includes(typeRaw as any) ? (typeRaw as SurfaceType) : 'Ninguno';
+
+                            const factorRaw = row['Factor'] ? cleanNumber(row['Factor']) : NaN;
+                            const factor = (factorRaw > 0) ? factorRaw : DEFAULT_FACTORS[type] || 1;
+
+                            const days = cleanNumber(row['Días'] || row['Days']);
+
+                            newComps.push({
+                                address,
+                                price,
+                                coveredSurface: covered,
+                                uncoveredSurface: uncovered,
+                                surfaceType: type,
+                                homogenizationFactor: factor,
+                                daysOnMarket: days
+                            });
+                        }
+
+                        if (user && db && paths) {
+                            console.log("Importing batch to:", paths.comparablesPath);
+                            const batch = writeBatch(db);
+                            newComps.forEach(c => {
+                                const newRef = doc(collection(db, paths.comparablesPath));
+                                batch.set(newRef, c);
+                            });
+                            await batch.commit();
+                        } else {
+                            setComparables(prev => [...prev, ...newComps.map(c => ({ ...c, id: Math.random().toString() }))]);
+                        }
+
+                        addLog(`Successfully imported ${newComps.length} rows from Sheet`);
+                    } catch (err: any) {
+                        console.error("Parse Logic Error:", err);
+                        alert(`Error processing data: ${err.message}`);
+                    }
+                },
+                error: (err: any) => {
+                    console.error("CSV Parse Error:", err);
+                    alert("Error parsing Sheet data.");
+                }
+            });
+        } catch (error: any) {
+            console.error("Sheet Import Error:", error);
+            alert("Error importando desde Sheet. Asegúrate que esté configurada como 'Cualquiera con el enlace puede ver'.");
+        }
+    };
+
+    // --- Calculations ---
+
+    const calculateHomogenizedSurface = (covered: number, uncovered: number, factor: number) => {
+        return covered + (uncovered * factor);
+    };
+
+    const calculateHomogenizedPrice = (price: number, hSurface: number) => {
+        if (hSurface === 0) return 0;
+        return price / hSurface;
+    };
+
+    const targetHomogenizedSurface = calculateHomogenizedSurface(target.coveredSurface, target.uncoveredSurface, target.homogenizationFactor);
+
+    const processedComparables = useMemo(() => {
+        return comparables.map(c => {
+            const hSurface = calculateHomogenizedSurface(c.coveredSurface, c.uncoveredSurface, c.homogenizationFactor);
+            const hPrice = calculateHomogenizedPrice(c.price, hSurface);
+            return { ...c, hSurface, hPrice };
+        }).filter(c => c.hPrice > 0);
+    }, [comparables]);
+
+    const stats = useMemo(() => {
+        if (processedComparables.length === 0) return { avg: 0, min: 0, max: 0, terciles: [0, 0, 0] };
+        const prices = processedComparables.map(c => c.hPrice).sort((a, b) => a - b);
+        const sum = prices.reduce((a, b) => a + b, 0);
+        const avg = sum / prices.length;
+        const min = prices[0];
+        const max = prices[prices.length - 1];
+        const t1 = prices[Math.floor(prices.length / 3)];
+        const t2 = prices[Math.floor(2 * prices.length / 3)];
+        return { avg, min, max, terciles: [t1, avg, t2] };
+    }, [processedComparables]);
+
+    const valuation = useMemo(() => {
+        if (!targetHomogenizedSurface) return { low: 0, market: 0, high: 0 };
+        return {
+            low: stats.terciles[0] * targetHomogenizedSurface,
+            market: stats.avg * targetHomogenizedSurface,
+            high: stats.terciles[2] * targetHomogenizedSurface
+        };
+    }, [stats, targetHomogenizedSurface]);
+
+    return {
+        target, setTarget, updateTarget,
+        comparables, setComparables, addComparable, updateComparable, deleteComparable, processedComparables,
+        savedValuations, handleNewValuation, handleSaveValuation, handleDeleteValuation, handleLoadValuation,
+        sheetUrl, setSheetUrl, handleImportFromSheet,
+        brokerName, setBrokerName,
+        matricula, setMatricula,
+        pdfTheme, setPdfTheme,
+        stats, valuation, targetHomogenizedSurface
+    };
+};
